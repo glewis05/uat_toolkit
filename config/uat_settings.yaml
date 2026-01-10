@@ -1,0 +1,137 @@
+# UAT Toolkit Settings
+# ============================================================================
+# Configuration for UAT cycle management
+
+# Database settings
+database:
+  # Path to shared database (can be overridden by PROPEL_DB_PATH env var)
+  path: ~/projects/requirements_toolkit/data/client_product_database.db
+
+# Default values for cycle creation
+defaults:
+  # Default UAT type if not specified
+  uat_type: feature
+
+  # Default assignment type
+  assignment_type: primary
+
+# Gate item templates by UAT type
+gate_templates:
+  feature:
+    - category: feature_deployment
+      item: "Feature deployed to QA environment"
+      required: true
+    - category: feature_deployment
+      item: "Feature flags configured correctly"
+      required: true
+    - category: critical_path
+      item: "Core happy path verified"
+      required: true
+    - category: environment
+      item: "QA environment stable and accessible"
+      required: true
+    - category: blocker_check
+      item: "No critical defects blocking feature"
+      required: true
+    - category: sign_off
+      item: "Product Owner approval for test start"
+      required: true
+
+  rule_validation:
+    - category: feature_deployment
+      item: "NCCN rules deployed to QA environment"
+      required: true
+    - category: feature_deployment
+      item: "All rule IDs verified in system"
+      required: true
+    - category: critical_path
+      item: "Patient registration flow tested"
+      required: true
+    - category: critical_path
+      item: "Test profiles created and validated"
+      required: true
+    - category: environment
+      item: "QA environment stable and accessible"
+      required: true
+    - category: blocker_check
+      item: "No critical defects in backlog"
+      required: true
+    - category: sign_off
+      item: "Clinical PM approval for test start"
+      required: true
+
+  regression:
+    - category: feature_deployment
+      item: "Release candidate deployed to QA"
+      required: true
+    - category: critical_path
+      item: "Smoke tests passing"
+      required: true
+    - category: environment
+      item: "QA environment mirrors production"
+      required: true
+    - category: blocker_check
+      item: "No P0/P1 defects open"
+      required: true
+    - category: sign_off
+      item: "Release Manager approval"
+      required: true
+
+# NCCN import settings
+nccn_import:
+  # Expected sheet name for profile catalog
+  default_sheet: "Test Profile Catalog"
+
+  # Column name mappings (Excel header -> database field)
+  column_map:
+    "Profile ID": profile_id
+    "Test Profile ID": profile_id
+    "Change ID": change_id
+    "Rule ID": target_rule
+    "NCCN Rule": target_rule
+    "Change Type": change_type
+    "Platform": platform
+    "Test Type": test_type
+    "Type": test_type
+    "Patient Conditions": patient_conditions
+    "Conditions": patient_conditions
+    "Expected Outcome": expected_results
+    "Expected Result": expected_results
+    "Cross Trigger": cross_trigger_check
+    "Notes": notes
+
+  # Test type normalization
+  test_type_map:
+    POS: positive
+    POSITIVE: positive
+    NEG: negative
+    NEGATIVE: negative
+    DEP: deprecated
+    DEPRECATED: deprecated
+
+# Export settings
+export:
+  # Default output directory
+  output_dir: outputs/
+
+  # Sheets to include in export
+  sheets:
+    - Summary
+    - All Tests
+    - By Tester
+    - Failed Tests
+    - Retest Queue
+
+# Status workflow
+status_workflow:
+  # Valid status transitions
+  transitions:
+    planning: [validation, cancelled]
+    validation: [kickoff, planning, cancelled]
+    kickoff: [testing, validation, cancelled]
+    testing: [review, cancelled]
+    review: [retesting, decision, cancelled]
+    retesting: [decision, cancelled]
+    decision: [complete, retesting, cancelled]
+    complete: []
+    cancelled: []

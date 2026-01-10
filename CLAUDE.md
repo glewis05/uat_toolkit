@@ -1,0 +1,102 @@
+# UAT Toolkit
+
+## Project Purpose
+This toolkit manages UAT (User Acceptance Testing) execution cycles, including test assignment, progress tracking, and compliance documentation.
+
+**Relationship to Other Toolkits:**
+- **Requirements Toolkit** generates test cases → UAT Toolkit manages their execution
+- Shares database with Configuration, Compliance, and Requirements toolkits
+- Does NOT generate test cases - only manages execution of existing tests
+
+## Owner Context
+- Solo developer (no separate front-end/back-end team)
+- Familiar with R, learning Python — explain Python concepts with R comparisons
+- Aviation background — aviation analogies work well (retired Marine Cobra pilot)
+- Prefers detailed explanations with heavy inline comments
+
+## Code Standards
+
+```python
+def example_function(param: str, optional: str = None) -> dict:
+    """
+    PURPOSE:
+        What this function does
+
+    R EQUIVALENT:
+        Comparable R function/approach (when applicable)
+
+    PARAMETERS:
+        param (str): Description with example
+        optional (str): Optional param with default
+
+    RETURNS:
+        dict: Description with example structure
+
+    WHY THIS APPROACH:
+        Reasoning behind implementation choices
+    """
+    # Heavy inline comments explaining WHY, not just WHAT
+    pass
+```
+
+**Key Standards:**
+- Use type hints for function signatures
+- Prefer explicit over clever — readability beats brevity
+- Every change logged to audit_history for FDA 21 CFR Part 11 compliance
+- Aviation analogies work well for complex concepts
+- Column naming: `created_date`/`updated_date` (NOT `created_at`/`updated_at`)
+- Heavy inline comments in all code
+
+## File Organization
+```
+inputs/          → Drop UAT package Excel files here
+outputs/         → Generated reports land here
+config/          → UAT settings
+database/        → Database operations
+importers/       → Excel import modules
+reporters/       → Progress reports and exports
+data/            → Symlink to shared database
+```
+
+## Key Commands
+- `python run.py create-cycle` — Create new UAT cycle
+- `python run.py import-nccn` — Import NCCN profiles from Excel
+- `python run.py status` — Show cycle progress
+- `python run.py export` — Export results to Excel
+
+## Two UAT Types
+
+### Feature UAT
+Tests user workflows across three personas:
+- provider_screening — Review patients, send invites
+- patient — Complete assessment, opt-out flows
+- provider_dashboard — Review results, clinical summary
+
+Test types: happy_path, negative, validation, edge_case
+
+### NCCN Rule Validation
+Tests rule engine trigger logic:
+- POS (positive) — Scenario SHOULD trigger the rule
+- NEG (negative) — Scenario should NOT trigger the rule
+- DEP (deprecated) — Rule was removed, verify it no longer appears
+
+Platforms: P4M (Prevention4ME), Px4M (Precision4ME)
+
+## Database
+Shared database: `data/client_product_database.db`
+
+Tables owned by this toolkit:
+- `uat_cycles` — UAT cycle definitions
+- `pre_uat_gate_items` — Gate checklist items
+
+Tables extended by this toolkit:
+- `uat_test_cases` — Adds cycle_id, assignment, NCCN fields, retest tracking
+
+Tables read from other toolkits:
+- `programs`, `clients` — From config toolkit
+- `audit_history` — Shared audit trail
+
+## Do NOT
+- Generate test cases (that's requirements_toolkit's job)
+- Modify program or client records
+- Skip audit logging

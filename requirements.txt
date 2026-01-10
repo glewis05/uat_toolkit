@@ -1,0 +1,8 @@
+# UAT Toolkit Dependencies
+# ============================================================================
+
+# Excel file handling (import/export)
+openpyxl>=3.1.0
+
+# Date/time utilities (optional, stdlib is usually sufficient)
+# python-dateutil>=2.8.0
