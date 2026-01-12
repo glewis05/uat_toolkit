@@ -5,7 +5,7 @@ This toolkit manages UAT (User Acceptance Testing) execution cycles, including t
 
 **Relationship to Other Toolkits:**
 - **Requirements Toolkit** generates test cases → UAT Toolkit manages their execution
-- Shares database with Configuration, Compliance, and Requirements toolkits
+- Uses Requirements DB via symlink (NOT the Config DB)
 - Does NOT generate test cases - only manages execution of existing tests
 
 ## Owner Context
@@ -82,19 +82,41 @@ Tests rule engine trigger logic:
 
 Platforms: P4M (Prevention4ME), Px4M (Precision4ME)
 
-## Database
-Shared database: `data/client_product_database.db`
+## Database Architecture
 
-Tables owned by this toolkit:
-- `uat_cycles` — UAT cycle definitions
-- `pre_uat_gate_items` — Gate checklist items
+### Unified Database Design
+All Propel Health toolkits share a **single unified database**:
 
-Tables extended by this toolkit:
-- `uat_test_cases` — Adds cycle_id, assignment, NCCN fields, retest tracking
+| Location | Purpose |
+|----------|---------|
+| `~/projects/data/client_product_database.db` | Requirements, configurations, UAT, access management |
 
-Tables read from other toolkits:
-- `programs`, `clients` — From config toolkit
+This toolkit accesses the database via **symlink**:
+```
+~/projects/uat_toolkit/data/client_product_database.db → ~/projects/data/client_product_database.db
+```
+
+**Why unified?**
+- Programs are the central entity connecting requirements AND configurations
+- UAT tests software requirements (user stories) and tracks execution
+- All data shares a single audit trail for compliance
+
+### Tables Owned by This Toolkit
+- `uat_cycles` — UAT cycle definitions (planning, testing, decision)
+- `pre_uat_gate_items` — Pre-flight checklist items
+
+### Tables Extended by This Toolkit
+- `uat_test_cases` — Adds: uat_cycle_id, assigned_to, persona, NCCN fields, retest tracking, dev_status
+
+### Tables Read from Requirements Toolkit
+- `programs`, `clients` — Software programs being tested
+- `user_stories` — Stories that generated the test cases
 - `audit_history` — Shared audit trail
+
+### Tables Available (configurations_toolkit manages)
+- `clinics`, `locations` — Clinic hierarchy (for clinic-based programs)
+- `config_values` — Program/clinic configurations
+- `users`, `user_access` — Access management
 
 ## Do NOT
 - Generate test cases (that's requirements_toolkit's job)
