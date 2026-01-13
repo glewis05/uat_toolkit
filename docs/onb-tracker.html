@@ -4,442 +4,1261 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ONB Questionnaire v1 - UAT Tracker</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'propel-navy': '#1a365d',
-                        'propel-teal': '#4a9aba',
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        .test-steps { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 0.875rem; }
-    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-50">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect } = React;
 
-        // =====================================================================
-        // TEST DATA - 66 actual test cases from UAT-ONB-853A06E9 cycle
-        // =====================================================================
-        const TEST_CASES_DATA = [
-  { test_id: "ONB-EXPORT-001-TC01", title: "Verify JSON export structure matches schema", category: "EXPORT", test_type: "happy_path", test_steps: "1. Complete form with test data\n2. Navigate to Review step\n3. Click \"Download JSON\" button\n4. Open downloaded file\n5. Verify valid JSON (parseable)\n6. Verify schema_version present\n7. Verify submitted_at timestamp\n8. Verify structure matches sample files", expected_results: "Valid JSON file downloaded with correct structure matching sample-p4m.json format", prerequisites: "Form completed, on Review step", priority: "Should Have" },
-  { test_id: "ONB-FORM-001-TC01", title: "Verify questions render from JSON configuration", category: "FORM", test_type: "happy_path", test_steps: "1. Open form-definition.json\n2. Add a new text question to clinic_info step:\n   {\"question_id\": \"test_field\", \"type\": \"text\", \"label\": \"Test Field\", \"required\": false}\n3. Save file and refresh form\n4. Navigate to Step 2\n5. Verify \"Test Field\" appears in the form\n6. Remove test_field from JSON and verify it disappears", expected_results: "New question renders in Step 2 without any code changes", prerequisites: "Access to form-definition.json file", priority: "Should Have" },
-  { test_id: "ONB-FORM-002-TC01", title: "Verify conditional field shows for P4M only", category: "FORM", test_type: "happy_path", test_steps: "1. Select P4M program in Step 1\n2. Navigate to Lab Configuration step\n3. Verify \"Indication\" field is visible\n4. Navigate back to Step 1\n5. Change selection to GRX\n6. Navigate to Lab Configuration step\n7. Verify \"Indication\" field is NOT visible", expected_results: "Indication field visible for P4M, hidden for GRX", prerequisites: "Form loaded", priority: "Should Have" },
-  { test_id: "ONB-FORM-003-TC01", title: "Verify required field indicators display consistently", category: "FORM", test_type: "happy_path", test_steps: "1. Navigate through all form steps\n2. Identify fields marked as required in form-definition.json\n3. Verify each required field has a red asterisk indicator\n4. Verify optional fields do NOT have an asterisk", expected_results: "Red asterisk (*) visible next to required field labels on all steps", prerequisites: "Form loaded", priority: "Should Have" },
-  { test_id: "ONB-FORM-003-TC02", title: "Verify required field prevents navigation when empty", category: "FORM", test_type: "negative", test_steps: "1. Navigate to Step 2\n2. Leave \"Clinic Name\" field empty (required field)\n3. Click \"Next\" button\n4. Verify form does NOT advance to Step 3\n5. Verify error message appears below Clinic Name field\n6. Verify field has red border", expected_results: "Form stays on current step, validation error shown below field, field highlighted in red", prerequisites: "Form on Step 2 (Clinic Information)", priority: "Should Have" },
-  { test_id: "ONB-FORM-003-TC03", title: "Verify NPI pattern validation", category: "FORM", test_type: "validation", test_steps: "1. Navigate to Ordering Providers step\n2. Enter provider name\n3. Enter invalid NPI: \"123\" (too short)\n4. Click away from field or click Next\n5. Verify validation error for NPI format\n6. Enter valid NPI: \"1234567890\"\n7. Verify error clears", expected_results: "Validation error shown: NPI must be 10 digits", prerequisites: "Form on Ordering Providers step", priority: "Should Have" },
-  { test_id: "ONB-FORM-003-TC04", title: "Verify email validation rejects invalid format", category: "FORM", test_type: "validation", test_steps: "1. Navigate to Step 4 - Contacts\n2. In Primary Contact Email field, enter \"invalid-email\"\n3. Click out of the field (blur)\n4. Verify validation error appears", expected_results: "Error message displays: \"Please enter a valid email address\"", prerequisites: "Form loaded, navigated to any step with email input", priority: "Must Have" },
-  { test_id: "ONB-FORM-003-TC05", title: "Verify email validation accepts valid format", category: "FORM", test_type: "happy_path", test_steps: "1. Navigate to Step 4 - Contacts\n2. In Primary Contact Email field, enter \"jane.doe@clinic.org\"\n3. Click out of the field (blur)\n4. Verify no validation error appears", expected_results: "Field accepts input, no validation error displayed", prerequisites: "Form loaded, navigated to any step with email input", priority: "Must Have" },
-  { test_id: "ONB-FORM-003-TC06", title: "Verify ZIP validation accepts 5-digit and ZIP+4", category: "FORM", test_type: "happy_path", test_steps: "1. Navigate to Step 2 - Clinic Information\n2. In clinic address ZIP field, enter \"98101\"\n3. Verify no validation error\n4. Clear field and enter \"98101-1234\"\n5. Verify no validation error", expected_results: "Both formats accepted: 5-digit (98101) and ZIP+4 (98101-1234)", prerequisites: "Form loaded, navigated to any step with ZIP input", priority: "Must Have" },
-  { test_id: "ONB-FORM-003-TC07", title: "Verify ZIP validation rejects invalid formats", category: "FORM", test_type: "negative", test_steps: "1. Navigate to Step 2 - Clinic Information\n2. In clinic address ZIP field, enter \"9810\" (4 digits)\n3. Verify validation error appears\n4. Clear and enter \"981011\" (6 digits)\n5. Verify validation error appears\n6. Clear and enter \"ABCDE\" (letters)\n7. Verify validation error appears", expected_results: "Validation error displays for each invalid format", prerequisites: "Form loaded, navigated to any step with ZIP input", priority: "Must Have" },
-  { test_id: "ONB-FORM-003-TC08", title: "Verify phone validation accepts multiple formats", category: "FORM", test_type: "happy_path", test_steps: "1. Navigate to Step 2 - Clinic Information\n2. In clinic phone field, enter \"5551234567\" (no separators)\n3. Verify no validation error\n4. Clear and enter \"555-123-4567\" (dashes)\n5. Verify no validation error\n6. Clear and enter \"555.123.4567\" (dots)\n7. Verify no validation error", expected_results: "All three formats accepted without validation error", prerequisites: "Form loaded, navigated to any step with phone input", priority: "Must Have" },
-  { test_id: "ONB-FORM-004-TC01", title: "Verify Add button creates new repeatable item", category: "FORM", test_type: "happy_path", test_steps: "1. Navigate to Satellite Locations step\n2. Click \"Add Satellite Location\" button\n3. Verify new location form section appears\n4. Verify section titled \"Location 1\"\n5. Verify all location fields present\n6. Click Add again\n7. Verify \"Location 2\" appears", expected_results: "New location form appears with fields for name, Epic ID, address, phone, hours", prerequisites: "Form on Satellite Locations step", priority: "Should Have" },
-  { test_id: "ONB-FORM-004-TC02", title: "Verify Remove button deletes item and renumbers", category: "FORM", test_type: "happy_path", test_steps: "1. Add 3 satellite locations with data\n2. Click Remove button on Location 2\n3. Confirm removal if prompted\n4. Verify Location 2 is removed\n5. Verify Location 3 data now shows as Location 2\n6. Verify Location 1 data unchanged", expected_results: "Location 2 removed, Location 3 renumbered to Location 2", prerequisites: "Form on Satellite Locations step with 3 locations added", priority: "Should Have" },
-  { test_id: "ONB-FORM-005-TC01", title: "Verify address composite renders all subfields", category: "FORM", test_type: "happy_path", test_steps: "1. Navigate to Clinic Information step\n2. Locate clinic address section\n3. Verify Street Address field present\n4. Verify City field present\n5. Verify State is a dropdown with all US states\n6. Verify ZIP Code field present\n7. Enter valid address and verify data saved together", expected_results: "Address fields grouped together: Street, City, State dropdown, ZIP code", prerequisites: "Form on Clinic Information step", priority: "Should Have" },
-  { test_id: "ONB-FORM-005-TC02", title: "Verify contact composite renders all subfields", category: "FORM", test_type: "happy_path", test_steps: "1. Navigate to Contacts step\n2. Locate Primary Contact section\n3. Verify all contact fields present\n4. Verify Preferred Channel has Email, Phone, Teams options\n5. Verify Preferred Time has Morning, Afternoon, Anytime options", expected_results: "Contact section shows: Name, Title, Email, Phone, Preferred Channel dropdown, Preferred Time dropdown", prerequisites: "Form on Contacts step", priority: "Should Have" },
-  { test_id: "ONB-GENE-001-TC01", title: "Verify gene selector appears for CustomNext-Cancer selection", category: "GENE", test_type: "happy_path", test_steps: "1. Navigate to Step 7 - Test Products\n2. Select \"CustomNext-Cancer\" from test panel dropdown\n3. Verify gene selector component appears\n4. Verify component contains: search input, gene checkbox list, selected genes area", expected_results: "Gene selector component appears below the test dropdown with search input, gene checkbox list, and selected genes area", prerequisites: "Form loaded, navigated to Step 7 - Test Products", priority: "Must Have" },
-  { test_id: "ONB-GENE-001-TC02", title: "Verify gene selector hidden for non-CustomNext tests", category: "GENE", test_type: "negative", test_steps: "1. Navigate to Step 7 - Test Products\n2. Select \"CancerNext-Expanded +RNAinsight\" from dropdown\n3. Verify gene selector component is NOT visible\n4. Change selection to \"CancerNext-Expanded + Limited Evidence Genes +RNAinsight\"\n5. Verify gene selector still not visible", expected_results: "Gene selector is not visible when non-CustomNext test is selected", prerequisites: "Form loaded, navigated to Step 7 - Test Products", priority: "Must Have" },
-  { test_id: "ONB-GENE-001-TC03", title: "Verify search filter reduces gene list", category: "GENE", test_type: "happy_path", test_steps: "1. Select CustomNext-Cancer to show gene selector\n2. Type \"BRCA\" in the search input field\n3. Verify gene list filters in real-time\n4. Verify only BRCA1 and BRCA2 are visible in the checkbox list", expected_results: "Gene list filters to show only BRCA1 and BRCA2, other genes are hidden", prerequisites: "Gene selector visible after selecting CustomNext-Cancer", priority: "Must Have" },
-  { test_id: "ONB-GENE-001-TC04", title: "Verify Select All button functionality", category: "GENE", test_type: "happy_path", test_steps: "1. Select CustomNext-Cancer to show gene selector\n2. Verify count shows \"0 of 90 genes selected\"\n3. Click \"Select All\" button\n4. Verify count updates to \"90 of 90 genes selected\"\n5. Verify all gene chips appear in selected genes area", expected_results: "All 90 genes become selected, count shows \"90 of 90 genes selected\", all genes appear as chips in selected area", prerequisites: "Gene selector visible, no genes currently selected", priority: "Must Have" },
-  { test_id: "ONB-GENE-001-TC05", title: "Verify Clear All button functionality", category: "GENE", test_type: "happy_path", test_steps: "1. Select CustomNext-Cancer to show gene selector\n2. Select several genes (BRCA1, BRCA2, ATM, CHEK2)\n3. Verify count shows \"4 of 90 genes selected\"\n4. Click \"Clear All\" button\n5. Verify count resets to \"0 of 90 genes selected\"\n6. Verify selected genes area is empty", expected_results: "All selections cleared, count shows \"0 of 90 genes selected\", selected genes area is empty", prerequisites: "Gene selector visible with multiple genes selected", priority: "Must Have" },
-  { test_id: "ONB-GENE-001-TC06", title: "Verify gene chip removal via X button", category: "GENE", test_type: "happy_path", test_steps: "1. Select CustomNext-Cancer and select BRCA1, BRCA2, ATM\n2. Verify count shows \"3 of 90 genes selected\"\n3. Locate BRCA1 chip in selected genes area\n4. Click the X button on the BRCA1 chip\n5. Verify BRCA1 chip is removed\n6. Verify count updates to \"2 of 90 genes selected\"\n7. Verify BRCA1 checkbox in the list is now unchecked", expected_results: "BRCA1 chip is removed, count updates to \"2 of 90 genes selected\", BRCA1 checkbox becomes unchecked in the list", prerequisites: "Gene selector visible with BRCA1, BRCA2, ATM selected", priority: "Must Have" },
-  { test_id: "ONB-GENE-001-TC07", title: "Verify validation requires at least one gene selected", category: "GENE", test_type: "negative", test_steps: "1. Select CustomNext-Cancer to show gene selector\n2. Do not select any genes (count shows \"0 of 90\")\n3. Click \"Next\" button to proceed\n4. Verify validation error message appears\n5. Verify user cannot advance to next step", expected_results: "Form displays validation error \"At least one gene must be selected\", user cannot proceed to next step", prerequisites: "Gene selector visible with zero genes selected", priority: "Must Have" },
-  { test_id: "ONB-GENE-001-TC08", title: "Verify JSON output includes selected genes array", category: "GENE", test_type: "validation", test_steps: "1. Complete form with CustomNext-Cancer selected\n2. Select genes: ATM, BRCA1, CHEK2\n3. Navigate to Review step\n4. Download JSON output\n5. Open JSON file and verify test_panel structure\n6. Verify selected_genes array contains selected genes alphabetically\n7. Verify gene_count matches array length", expected_results: "JSON output contains test_panel object with: test_name=\"CustomNext-Cancer\", test_code=\"9511\", selected_genes=[\"ATM\",\"BRCA1\",\"CHEK2\"], gene_count=3", prerequisites: "Form completed with CustomNext-Cancer selected and 3 genes chosen (ATM, BRCA1, CHEK2)", priority: "Must Have" },
-  { test_id: "ONB-SAVE-001-TC02", title: "Verify auto-save indicator displays timestamp", category: "SAVE", test_type: "happy_path", test_steps: "1. Open form in browser\n2. Select a program\n3. Navigate to Step 2\n4. Enter any field value\n5. Look at save status bar at top of form\n6. Verify auto-save indicator shows timestamp", expected_results: "\"Auto-saved at [current time]\" indicator visible with green checkmark", prerequisites: "Form loaded", priority: "Should Have" },
-  { test_id: "ONB-SAVE-001-TC03", title: "Auto-save triggers on field change", category: "SAVE", test_type: "happy_path", test_steps: "1. Select a program (e.g., P4M)\n2. Click Next to go to step 2\n3. Enter text in Clinic Name field\n4. Observe the save status bar", expected_results: "Save status bar displays \"Auto-saved at [current time]\" within 1-2 seconds of typing", prerequisites: "Browser localStorage is empty. Form is loaded at step 1.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-001-TC04", title: "Auto-save stores correct data structure in localStorage", category: "SAVE", test_type: "validation", test_steps: "1. Fill out program selection and clinic name\n2. Open browser DevTools (F12)\n3. Go to Application tab > Local Storage\n4. Find the propel-onboarding-draft key\n5. Inspect the stored JSON value", expected_results: "Opening browser DevTools > Application > localStorage shows key \"propel-onboarding-draft\" with JSON containing formData, currentStep, savedAt, and version fields", prerequisites: "Form loaded. DevTools accessible.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-001-TC05", title: "Auto-save captures current step position", category: "SAVE", test_type: "validation", test_steps: "1. Complete steps 1-3 with valid data\n2. Navigate to step 4 (Contacts)\n3. Enter primary contact name\n4. Check localStorage value in DevTools\n5. Verify currentStep value", expected_results: "localStorage JSON shows currentStep matching the step number user navigated to (e.g., currentStep: 4 for Contacts)", prerequisites: "Form loaded with empty localStorage.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-002-TC04", title: "Restore prompt appears when saved data exists", category: "SAVE", test_type: "happy_path", test_steps: "1. Fill out form through step 3 with valid data\n2. Close the browser tab\n3. Open a new tab and navigate to the form URL\n4. Observe the page load", expected_results: "Modal appears with title \"Resume Previous Session?\", displays saved date/time, and shows \"Resume Draft\" and \"Start Fresh\" buttons", prerequisites: "localStorage contains valid saved draft data from a previous session.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-002-TC05", title: "Resume Draft restores data and step position", category: "SAVE", test_type: "happy_path", test_steps: "1. With restore prompt displayed, click \"Resume Draft\"\n2. Verify the form data is restored (program, clinic name, etc.)\n3. Verify the current step matches where you left off", expected_results: "Form loads with all previously entered data populated and user is on step 3 (the step they were on when they left)", prerequisites: "Restore prompt is displayed after returning to form with saved data.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-002-TC06", title: "Start Fresh clears saved data", category: "SAVE", test_type: "happy_path", test_steps: "1. With restore prompt displayed, click \"Start Fresh\"\n2. Verify the form starts at step 1 with empty fields\n3. Refresh the page\n4. Verify no restore prompt appears", expected_results: "Form starts at step 1 with all fields empty. localStorage is cleared. No restore prompt appears on next page refresh.", prerequisites: "Restore prompt is displayed after returning to form with saved data.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-002-TC07", title: "No restore prompt when no saved data exists", category: "SAVE", test_type: "negative", test_steps: "1. Clear localStorage or open incognito window\n2. Navigate to the form URL\n3. Observe the page load", expected_results: "Form loads directly to step 1 with no modal prompt. User can immediately begin filling out the form.", prerequisites: "Browser localStorage is empty (no saved draft). Use incognito mode or clear localStorage manually.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-003-TC03", title: "Save Draft downloads JSON file", category: "SAVE", test_type: "happy_path", test_steps: "1. Fill out program selection (P4M)\n2. Fill out clinic information (name, address)\n3. Click \"Save Draft\" button in the status bar\n4. Observe the file download", expected_results: "JSON file downloads with filename \"propel-onboarding-draft-YYYY-MM-DD.json\" (e.g., propel-onboarding-draft-2025-01-08.json)", prerequisites: "Form has data entered in at least 2 steps.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-003-TC04", title: "Downloaded file contains correct JSON structure", category: "SAVE", test_type: "validation", test_steps: "1. Download a draft file using Save Draft\n2. Open the downloaded .json file in a text editor\n3. Verify JSON structure contains required fields\n4. Verify formData contains the values entered in the form", expected_results: "JSON file contains: formData object with all entered values, currentStep number, savedAt ISO timestamp, version \"1.0\", isDraft: true", prerequisites: "Downloaded draft file from Save Draft button.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-004-TC03", title: "Load Draft restores form from file", category: "SAVE", test_type: "happy_path", test_steps: "1. Click \"Load Draft\" button in the status bar\n2. Select the previously downloaded draft JSON file\n3. Observe the form state after file loads", expected_results: "Form populates with all data from the draft file and navigates to the step that was saved in the file", prerequisites: "Have a valid draft JSON file downloaded previously. Form is in a fresh state (different browser or cleared localStorage).", priority: "Must Have" },
-  { test_id: "ONB-SAVE-004-TC04", title: "Invalid file shows error message", category: "SAVE", test_type: "negative", test_steps: "1. Click \"Load Draft\" button\n2. Select an invalid file (e.g., a .txt file or corrupted JSON)\n3. Observe the error handling", expected_results: "Alert message displays: \"Unable to read file. Please select a valid Propel onboarding draft (.json).\" Form remains unchanged.", prerequisites: "Have an invalid JSON file or non-JSON file ready (e.g., a text file or malformed JSON).", priority: "Must Have" },
-  { test_id: "ONB-SAVE-004-TC05", title: "Load Draft works across different browsers", category: "SAVE", test_type: "edge_case", test_steps: "1. In Chrome, fill out form and click \"Save Draft\"\n2. Open Firefox browser\n3. Navigate to the form URL\n4. Click \"Load Draft\" and select the file saved from Chrome\n5. Verify form data is restored correctly", expected_results: "Draft file loads successfully and form is populated correctly in Firefox, even though the file was created in Chrome", prerequisites: "Draft file saved from Chrome browser. Firefox browser available.", priority: "Should Have" },
-  { test_id: "ONB-SAVE-005-TC03", title: "Start Over shows confirmation modal", category: "SAVE", test_type: "happy_path", test_steps: "1. Fill out form through step 3 with valid data\n2. Click \"Start Over\" button in the status bar\n3. Observe the confirmation modal", expected_results: "Confirmation modal appears with warning message and two buttons: \"Cancel\" and \"Clear All\"", prerequisites: "Form has data entered in multiple steps.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-005-TC04", title: "Confirming Clear All resets form completely", category: "SAVE", test_type: "happy_path", test_steps: "1. With confirmation modal displayed, click \"Clear All\"\n2. Verify form returns to step 1\n3. Verify all fields are empty\n4. Check localStorage in DevTools to confirm it is cleared", expected_results: "Form resets to step 1 with all fields empty. localStorage is cleared. Auto-save indicator resets to \"Your progress will be saved automatically\"", prerequisites: "Confirmation modal is displayed after clicking Start Over.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-005-TC05", title: "Cancel returns to form without changes", category: "SAVE", test_type: "happy_path", test_steps: "1. With confirmation modal displayed, click \"Cancel\"\n2. Verify modal closes\n3. Verify form data is still present\n4. Verify user is still on the same step", expected_results: "Modal closes and form remains unchanged with all data intact. User stays on the same step.", prerequisites: "Confirmation modal is displayed after clicking Start Over.", priority: "Must Have" },
-  { test_id: "ONB-SAVE-006-TC02", title: "Help icon expands informational panel", category: "SAVE", test_type: "happy_path", test_steps: "1. Locate the help icon (?) in the status bar\n2. Click the help icon\n3. Observe the expanded panel", expected_results: "Informational panel expands below the status bar with explanations of Auto-save, Save Draft, and Load Draft functionality", prerequisites: "Form is loaded and status bar is visible.", priority: "Should Have" },
-  { test_id: "ONB-SAVE-006-TC03", title: "Help icon toggles panel closed", category: "SAVE", test_type: "happy_path", test_steps: "1. With help panel expanded, click the help icon (?) again\n2. Observe the panel collapse", expected_results: "Panel collapses and is no longer visible. Help icon remains clickable.", prerequisites: "Help panel is currently expanded.", priority: "Should Have" },
-  { test_id: "ONB-SAVE-006-TC04", title: "Help content explains all save options and limitations", category: "SAVE", test_type: "validation", test_steps: "1. Expand the help panel by clicking the (?) icon\n2. Read through the content\n3. Verify all three save methods are explained\n4. Verify the browser limitation note is present", expected_results: "Help panel contains: (1) Explanation that auto-save only works in same browser/device, (2) Description of Save Draft for cross-device access, (3) Description of Load Draft to restore from file, (4) Note about browser limitation clearly stated", prerequisites: "Help panel is expanded.", priority: "Should Have" },
-  { test_id: "ONB-STEP-001-TC01", title: "Verify program options display correctly", category: "STEP", test_type: "happy_path", test_steps: "1. Open form\n2. Verify Step 1 \"Program Selection\" displayed\n3. Verify P4M option with \"Prevention4ME\" and description\n4. Verify PR4M option with \"Precision4ME\" and description\n5. Verify GRX option with \"GenoRx\" and description\n6. Select each option and verify radio button state changes", expected_results: "Three program options displayed with names and descriptions, radio buttons functional", prerequisites: "Form loaded at Step 1", priority: "Should Have" },
-  { test_id: "ONB-STEP-002-TC01", title: "Verify clinic information fields present", category: "STEP", test_type: "happy_path", test_steps: "1. Select P4M and navigate to Step 2\n2. Verify Clinic Name field (required)\n3. Verify Epic Department ID field\n4. Verify Address composite field\n5. Verify Timezone dropdown\n6. Verify Hours of Operation field\n7. Verify Website fields\n8. Fill all fields and proceed to Step 3", expected_results: "All clinic information fields present and functional", prerequisites: "Program selected, navigated to Step 2", priority: "Should Have" },
-  { test_id: "ONB-STEP-002-TC02", title: "Verify clinic phone field always visible and required", category: "STEP", test_type: "happy_path", test_steps: "1. Load onboarding form\n2. Navigate to Step 2 - Clinic Information\n3. Locate Clinic Office Phone Number field\n4. Verify field is visible and marked required", expected_results: "Clinic Office Phone Number field displays as required with red asterisk, positioned after clinic address", prerequisites: "Form loaded, navigated to Step 2 - Clinic Information", priority: "Must Have" },
-  { test_id: "ONB-STEP-002-TC03", title: "Verify patient communication checkbox displays", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Step 2 - Clinic Information\n2. Locate checkbox below clinic phone field\n3. Verify checkbox label reads \"This number can be used on patient communications\"\n4. Verify checkbox is unchecked by default", expected_results: "Checkbox displays below clinic phone field, unchecked by default", prerequisites: "Form loaded, navigated to Step 2 - Clinic Information", priority: "Must Have" },
-  { test_id: "ONB-STEP-002-TC04", title: "Verify helpdesk fields appear when checkbox checked", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Step 2 - Clinic Information\n2. Locate \"Does this clinic have a separate patient-facing helpline?\" checkbox\n3. Check the checkbox\n4. Verify two new fields appear: Helpline Phone Number and Helpline Hours of Operation", expected_results: "Helpline Phone Number and Helpline Hours fields appear below the checkbox", prerequisites: "Form loaded, navigated to Step 2 - Clinic Information", priority: "Must Have" },
-  { test_id: "ONB-STEP-002-TC05", title: "Verify helpdesk fields hidden when checkbox unchecked", category: "STEP", test_type: "negative", test_steps: "1. Navigate to Step 2 - Clinic Information\n2. Verify \"Does this clinic have a separate patient-facing helpline?\" checkbox is unchecked\n3. Verify Helpline Phone Number field is NOT visible\n4. Verify Helpline Hours field is NOT visible", expected_results: "Helpline Phone Number and Helpline Hours fields are not visible on the page", prerequisites: "Form loaded, navigated to Step 2 - Clinic Information, helpline checkbox unchecked", priority: "Must Have" },
-  { test_id: "ONB-STEP-004-TC01", title: "Verify Genetic Counselor contact fields display", category: "STEP", test_type: "happy_path", test_steps: "1. Load the onboarding form\n2. Navigate to Step 4 - Contacts\n3. Locate the Genetic Counselor section\n4. Verify all three fields are present and marked required", expected_results: "Genetic Counselor section displays with Name, Email, and Phone fields, all marked as required with red asterisks", prerequisites: "Form loaded, navigated to Step 4 - Contacts", priority: "Must Have" },
-  { test_id: "ONB-STEP-004-TC02", title: "Verify Genetic Counselor field order in form", category: "STEP", test_type: "validation", test_steps: "1. Load the onboarding form\n2. Navigate to Step 4 - Contacts\n3. Review field order on the page\n4. Verify Genetic Counselor appears after Clinic Champion", expected_results: "Genetic Counselor section appears immediately after Clinic Champion section, before Primary Contact", prerequisites: "Form loaded, navigated to Step 4 - Contacts", priority: "Should Have" },
-  { test_id: "ONB-STEP-005-TC01", title: "Verify Program Champion fields are optional", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Step 5 - Key Stakeholders\n2. Leave Program Champion fields blank (name, title, email)\n3. Click Next\n4. Verify form proceeds to Step 6", expected_results: "Form proceeds to next step without Program Champion information", prerequisites: "Form loaded, navigated to Step 5 - Key Stakeholders", priority: "Must Have" },
-  { test_id: "ONB-STEP-006-TC01", title: "Verify lab configuration varies by program", category: "STEP", test_type: "happy_path", test_steps: "1. With P4M selected, go to Lab Configuration\n2. Verify Lab Partner shows Ambry Genetics\n3. Verify Indication field is visible\n4. Verify Criteria for Testing field is visible\n5. Go back to Step 1, select GRX\n6. Return to Lab Configuration\n7. Verify Lab Partner shows Helix\n8. Verify Indication field is NOT visible", expected_results: "Lab partner shows Ambry for P4M, Helix for GRX; conditional fields show/hide correctly", prerequisites: "P4M selected, navigated to Lab Configuration step", priority: "Should Have" },
-  { test_id: "ONB-STEP-006-TC02", title: "Verify sample type checkbox label is correctly worded", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Step 6 - Lab Configuration\n2. Locate the sample type section\n3. Verify checkbox exists with label \"Offer additional sample type options\"\n4. Verify checking the box reveals alternate specimen type dropdown", expected_results: "Checkbox displays with label \"Offer additional sample type options\"", prerequisites: "Form loaded, navigated to Step 6 - Lab Configuration", priority: "Must Have" },
-  { test_id: "ONB-STEP-007-TC01", title: "Verify test products filtered by program", category: "STEP", test_type: "happy_path", test_steps: "1. With P4M selected, go to Test Products\n2. Click Add Test Product\n3. Open Test Name dropdown\n4. Verify only P4M-compatible tests shown\n5. Select a test and add modifications\n6. Add second test product\n7. Verify both saved correctly", expected_results: "Test products filtered to show only options valid for selected program", prerequisites: "P4M selected, navigated to Test Products step", priority: "Should Have" },
-  { test_id: "ONB-STEP-007-TC02", title: "Verify Ambry test options display in dropdown", category: "STEP", test_type: "happy_path", test_steps: "1. Load the onboarding form\n2. Navigate to Step 7 - Test Products\n3. Click on test panel dropdown\n4. Verify all 5 Ambry test options are listed", expected_results: "Dropdown displays all 5 Ambry test options: CustomNext-Cancer, CancerNext-Expanded +RNAinsight, CancerNext-Expanded, CancerNext-Expanded + Limited Evidence Genes +RNAinsight, CancerNext-Expanded + Limited Evidence Genes", prerequisites: "Form loaded, navigated to Step 7 - Test Products", priority: "Must Have" },
-  { test_id: "ONB-STEP-007-TC03", title: "Verify test code auto-populates on selection", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Step 7 - Test Products\n2. Select \"CancerNext-Expanded +RNAinsight\" from dropdown\n3. Verify test code field auto-populates with \"8875-R\"\n4. Attempt to edit the test code field\n5. Verify field is read-only", expected_results: "Test code field displays \"8875-R\" and is read-only (not editable by user)", prerequisites: "Form loaded, navigated to Step 7 - Test Products", priority: "Must Have" },
-  { test_id: "ONB-STEP-008-TC01", title: "Verify provider entry with valid NPI", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Ordering Providers step\n2. Enter Provider Name: \"Dr. Jane Smith\"\n3. Enter NPI: \"1234567890\"\n4. Select Specialty from dropdown\n5. Click Add Provider\n6. Add second provider\n7. Click Next\n8. Verify form proceeds with valid data", expected_results: "Provider added with valid NPI, form proceeds to next step", prerequisites: "Navigated to Ordering Providers step", priority: "Should Have" },
-  { test_id: "ONB-STEP-009-TC01", title: "Verify review displays all data with edit navigation", category: "STEP", test_type: "happy_path", test_steps: "1. Complete all form steps with test data\n2. Navigate to Review step\n3. Verify Program Selection section shows selected program\n4. Verify Clinic Information section shows entered data\n5. Verify each section has an Edit button\n6. Click Edit on Clinic Information\n7. Verify navigates back to Step 2", expected_results: "Review page shows all entered data organized by section with Edit buttons", prerequisites: "All steps completed with test data", priority: "Should Have" },
-  { test_id: "ONB-STEP-009-TC02", title: "Verify Word document download button works", category: "STEP", test_type: "happy_path", test_steps: "1. Complete form through all steps\n2. Navigate to Step 10 - Review and Download\n3. Click \"Download Word Document\" button\n4. Verify .docx file downloads\n5. Verify filename includes clinic name and date", expected_results: "Word document (.docx) downloads with filename format: {clinic-name}-onboarding-YYYY-MM-DD.docx", prerequisites: "Form completed through all steps, on Step 10 - Review and Download", priority: "Must Have" },
-  { test_id: "ONB-STEP-009-TC03", title: "Verify Word document contains all form sections", category: "STEP", test_type: "validation", test_steps: "1. Download Word document from completed form\n2. Open document in Microsoft Word\n3. Verify document contains Program Selection\n4. Verify document contains Clinic Information (name, address, phone)\n5. Verify document contains Contacts section\n6. Verify document contains Stakeholders section\n7. Verify document contains Lab Configuration\n8. Verify document contains Test Products\n9. Verify document contains Ordering Providers\n10. Verify document contains Extract Filtering settings\n11. Verify all data matches what was entered in the form", expected_results: "Word document contains all sections with accurate data from form entries", prerequisites: "Word document downloaded from completed form", priority: "Must Have" },
-  { test_id: "ONB-STEP-010-TC01", title: "Verify provider filter fields appear when checkbox checked", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Step 9 - Extract Filtering\n2. Locate \"Filter by provider\" checkbox\n3. Check the checkbox\n4. Verify provider input section appears\n5. Verify First Name field is visible and required\n6. Verify Last Name field is visible and required", expected_results: "Repeatable provider section appears with First Name and Last Name fields, both marked required", prerequisites: "Form loaded, navigated to Step 9 - Extract Filtering", priority: "Must Have" },
-  { test_id: "ONB-STEP-010-TC02", title: "Verify provider list mandatory when filter checkbox checked", category: "STEP", test_type: "negative", test_steps: "1. Navigate to Step 9 - Extract Filtering\n2. Check \"Filter by provider\" checkbox\n3. Leave First Name and Last Name fields empty\n4. Click Next\n5. Verify validation error prevents navigation", expected_results: "Validation error prevents navigation: \"At least one provider is required when filtering by provider\"", prerequisites: "Form loaded, navigated to Step 9 - Extract Filtering", priority: "Must Have" },
-  { test_id: "ONB-STEP-010-TC03", title: "Verify Add Provider button creates additional entry", category: "STEP", test_type: "happy_path", test_steps: "1. Navigate to Step 9 - Extract Filtering\n2. Check \"Filter by provider\" checkbox\n3. Enter first provider: First Name = \"Jane\", Last Name = \"Smith\"\n4. Click \"Add Provider\" button\n5. Verify second provider entry appears", expected_results: "Second provider entry appears with First Name and Last Name fields", prerequisites: "Form loaded, navigated to Step 9 - Extract Filtering, provider filter checkbox checked", priority: "Must Have" },
-  { test_id: "ONB-UI-001-TC01", title: "Verify progress indicator shows correct step", category: "UI", test_type: "happy_path", test_steps: "1. Complete Steps 1-2\n2. Navigate to Step 3\n3. Verify progress shows \"Step 3 of 9\"\n4. Verify current step title displayed\n5. Verify steps 1-2 show as completed\n6. Verify step 3 highlighted as current\n7. Verify steps 4-9 shown but not active", expected_results: "Progress indicator shows \"Step 3 of 9\" with step title and visual progress", prerequisites: "Form navigated to Step 3", priority: "Should Have" },
-  { test_id: "ONB-UI-002-TC01", title: "Verify Previous/Next navigation works correctly", category: "UI", test_type: "happy_path", test_steps: "1. Open form at Step 1\n2. Verify Previous button NOT visible\n3. Select program and click Next\n4. Verify now on Step 2\n5. Verify Previous button now visible\n6. Click Previous\n7. Verify returned to Step 1\n8. Select program, complete form to Step 8\n9. Verify Next button says \"Review\"", expected_results: "Previous/Next buttons navigate correctly, Previous hidden on Step 1", prerequisites: "Form loaded", priority: "Should Have" },
-  { test_id: "ONB-UI-003-TC01", title: "Verify branding consistency across form", category: "UI", test_type: "happy_path", test_steps: "1. Open form\n2. Verify header displays \"Propel Health\"\n3. Verify headers use navy color (#1a365d)\n4. Verify buttons use teal color (#4a9aba)\n5. Navigate through all steps\n6. Verify consistent styling throughout\n7. Check for any visual bugs or misaligned elements", expected_results: "Consistent branding with navy headers, teal accents, professional appearance", prerequisites: "Form loaded", priority: "Should Have" }
-];
+    // =====================================================
+    // CONFIGURATION - ONB Questionnaire v1
+    // =====================================================
+    const UAT_CONFIG = {
+      id: 'onb-v1',
+      name: 'ONB Questionnaire v1',
+      target_date: '2025-05-02',
+      tester_default: 'Glen Lewis',
+      formspree_id: null,  // Add your Formspree ID to enable email submission
+      localStorage_key: 'onb_uat_tracker'
+    };
 
-        const CATEGORY_INFO = {
-            'EXPORT': { name: 'JSON Export', description: 'Export functionality and schema validation', color: 'purple' },
-            'FORM': { name: 'Form Validation', description: 'Field validation and rendering patterns', color: 'blue' },
-            'GENE': { name: 'Gene Selector', description: 'CustomNext-Cancer gene selection component', color: 'indigo' },
-            'SAVE': { name: 'Auto-Save & Draft', description: 'Save, resume, download/upload functionality', color: 'green' },
-            'STEP': { name: 'Form Steps', description: 'Each wizard step from Program to Review', color: 'orange' },
-            'UI': { name: 'User Interface', description: 'Navigation, progress, and branding', color: 'pink' },
-        };
+    // =====================================================
+    // WORKFLOW SECTIONS - Guided Testing Flow
+    // =====================================================
+    const WORKFLOW_SECTIONS = [
+      {
+        code: 'P4M',
+        name: 'Prevention4ME Walkthrough',
+        description: 'Complete a full P4M onboarding form from start to finish',
+        guidance: 'Fill out the form as if you were onboarding a real P4M clinic. Check each validation as you encounter it naturally.',
+        icon: '🩺'
+      },
+      {
+        code: 'PR4M',
+        name: 'Precision4ME Walkthrough',
+        description: 'Test program-specific differences',
+        guidance: 'Clear the form and start fresh with Precision4ME selected. Watch for fields that appear or disappear. Verify the same validations still work.',
+        icon: '🔬'
+      },
+      {
+        code: 'GRX',
+        name: 'GenoRx Walkthrough',
+        description: 'Complete a GRX form with gene selector testing',
+        guidance: 'Select GenoRx program. Pay special attention to the gene selector component and lab configuration.',
+        icon: '🧬'
+      },
+      {
+        code: 'DRAFT',
+        name: 'Draft Management',
+        description: 'Test save, resume, and draft file features',
+        guidance: 'These tests check the auto-save, resume, download, and upload features. Do these after completing at least one walkthrough.',
+        icon: '💾'
+      },
+      {
+        code: 'EDGE',
+        name: 'Edge Cases',
+        description: 'Boundary conditions and unusual scenarios',
+        guidance: 'Test help text, error recovery, and edge cases. These can be done anytime.',
+        icon: '🔍'
+      }
+    ];
 
-        const STATUS_COLORS = {
-            'Not Run': 'bg-gray-100 text-gray-700',
-            'Pass': 'bg-green-100 text-green-800',
-            'Fail': 'bg-red-100 text-red-800',
-            'Blocked': 'bg-amber-100 text-amber-800',
-            'Skipped': 'bg-blue-100 text-blue-800',
-        };
+    // =====================================================
+    // TEST CASES DATA - 66 Tests Organized by Workflow
+    // =====================================================
+    const TEST_CASES_DATA = [
+      {
+        test_id: 'ONB-STEP-001-TC01',
+        title: 'Verify program options display correctly',
+        workflow_section: 'P4M',
+        workflow_order: 1,
+        test_type: 'happy_path',
+        test_steps: '1. Open form\n2. Verify Step 1 "Program Selection" displayed\n3. Verify P4M option with "Prevention4ME" and description\n4. Verify PR4M option with "Precision4ME" and description\n5. Verify GRX option with "GenoRx" and description\n6. Select each option and verify radio button state changes',
+        expected_results: 'Three program options displayed with names and descriptions, radio buttons functional',
+        context_hint: '',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-002-TC01',
+        title: 'Verify clinic information fields present',
+        workflow_section: 'P4M',
+        workflow_order: 2,
+        test_type: 'happy_path',
+        test_steps: '1. Select P4M and navigate to Step 2\n2. Verify Clinic Name field (required)\n3. Verify Epic Department ID field\n4. Verify Address composite field\n5. Verify Timezone dropdown\n6. Verify Hours of Operation field\n7. Verify Website fields\n8. Fill all fields and proceed to Step 3',
+        expected_results: 'All clinic information fields present and functional',
+        context_hint: 'While filling out Step 2 - Clinic Information',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-002-TC02',
+        title: 'Verify clinic phone field always visible and required',
+        workflow_section: 'P4M',
+        workflow_order: 3,
+        test_type: 'happy_path',
+        test_steps: '1. Load onboarding form\n2. Navigate to Step 2 - Clinic Information\n3. Locate Clinic Office Phone Number field\n4. Verify field is visible and marked required',
+        expected_results: 'Clinic Office Phone Number field displays as required with red asterisk, positioned after clinic address',
+        context_hint: 'While filling out Step 2 - Clinic Information',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-002-TC03',
+        title: 'Verify patient communication checkbox displays',
+        workflow_section: 'P4M',
+        workflow_order: 4,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 2 - Clinic Information\n2. Locate checkbox below clinic phone field\n3. Verify checkbox label reads "This number can be used on patient communications"\n4. Verify checkbox is unchecked by default',
+        expected_results: 'Checkbox displays below clinic phone field, unchecked by default',
+        context_hint: '',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-002-TC04',
+        title: 'Verify helpdesk fields appear when checkbox checked',
+        workflow_section: 'P4M',
+        workflow_order: 5,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 2 - Clinic Information\n2. Locate "Does this clinic have a separate patient-facing helpline?" checkbox\n3. Check the checkbox\n4. Verify two new fields appear: Helpline Phone Number and Helpline Hours of Operation',
+        expected_results: 'Helpline Phone Number and Helpline Hours fields appear below the checkbox',
+        context_hint: 'Look for the patient helpline checkbox in Clinic Info',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-002-TC05',
+        title: 'Verify helpdesk fields hidden when checkbox unchecked',
+        workflow_section: 'P4M',
+        workflow_order: 6,
+        test_type: 'negative',
+        test_steps: '1. Navigate to Step 2 - Clinic Information\n2. Verify "Does this clinic have a separate patient-facing helpline?" checkbox is unchecked\n3. Verify Helpline Phone Number field is NOT visible\n4. Verify Helpline Hours field is NOT visible',
+        expected_results: 'Helpline Phone Number and Helpline Hours fields are not visible on the page',
+        context_hint: 'Look for the patient helpline checkbox in Clinic Info',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-FORM-001-TC01',
+        title: 'Verify questions render from JSON configuration',
+        workflow_section: 'P4M',
+        workflow_order: 7,
+        test_type: 'happy_path',
+        test_steps: '1. Open form-definition.json\n2. Add a new text question to clinic_info step:\n   {"question_id": "test_field", "type": "text", "label": "Test Field", "required": false}\n3. Save file and refresh form\n4. Navigate to Step 2\n5. Verify "Test Field" appears in the form\n6. Remove test_field from JSON and verify it disappears',
+        expected_results: 'New question renders in Step 2 without any code changes',
+        context_hint: '',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-002-TC01',
+        title: 'Verify conditional field shows for P4M only',
+        workflow_section: 'P4M',
+        workflow_order: 8,
+        test_type: 'happy_path',
+        test_steps: '1. Select P4M program in Step 1\n2. Navigate to Lab Configuration step\n3. Verify "Indication" field is visible\n4. Navigate back to Step 1\n5. Change selection to GRX\n6. Navigate to Lab Configuration step\n7. Verify "Indication" field is NOT visible',
+        expected_results: 'Indication field visible for P4M, hidden for GRX',
+        context_hint: '',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC01',
+        title: 'Verify required field indicators display consistently',
+        workflow_section: 'P4M',
+        workflow_order: 9,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate through all form steps\n2. Identify fields marked as required in form-definition.json\n3. Verify each required field has a red asterisk indicator\n4. Verify optional fields do NOT have an asterisk',
+        expected_results: 'Red asterisk (*) visible next to required field labels on all steps',
+        context_hint: 'Check asterisks and validation errors on form fields',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC02',
+        title: 'Verify required field prevents navigation when empty',
+        workflow_section: 'P4M',
+        workflow_order: 10,
+        test_type: 'negative',
+        test_steps: '1. Navigate to Step 2\n2. Leave "Clinic Name" field empty (required field)\n3. Click "Next" button\n4. Verify form does NOT advance to Step 3\n5. Verify error message appears below Clinic Name field\n6. Verify field has red border',
+        expected_results: 'Form stays on current step, validation error shown below field, field highlighted in red',
+        context_hint: 'Check asterisks and validation errors on form fields',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC03',
+        title: 'Verify NPI pattern validation',
+        workflow_section: 'P4M',
+        workflow_order: 11,
+        test_type: 'validation',
+        test_steps: '1. Navigate to Ordering Providers step\n2. Enter provider name\n3. Enter invalid NPI: "123" (too short)\n4. Click away from field or click Next\n5. Verify validation error for NPI format\n6. Enter valid NPI: "1234567890"\n7. Verify error clears',
+        expected_results: 'Validation error shown: NPI must be 10 digits',
+        context_hint: 'When entering provider NPI numbers',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC04',
+        title: 'Verify email validation rejects invalid format',
+        workflow_section: 'P4M',
+        workflow_order: 12,
+        test_type: 'validation',
+        test_steps: '1. Navigate to Step 4 - Contacts\n2. In Primary Contact Email field, enter "invalid-email"\n3. Click out of the field (blur)\n4. Verify validation error appears',
+        expected_results: 'Error message displays: "Please enter a valid email address"',
+        context_hint: 'When entering any email field',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC05',
+        title: 'Verify email validation accepts valid format',
+        workflow_section: 'P4M',
+        workflow_order: 13,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 4 - Contacts\n2. In Primary Contact Email field, enter "jane.doe@clinic.org"\n3. Click out of the field (blur)\n4. Verify no validation error appears',
+        expected_results: 'Field accepts input, no validation error displayed',
+        context_hint: 'When entering any email field',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC06',
+        title: 'Verify ZIP validation accepts 5-digit and ZIP+4',
+        workflow_section: 'P4M',
+        workflow_order: 14,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 2 - Clinic Information\n2. In clinic address ZIP field, enter "98101"\n3. Verify no validation error\n4. Clear field and enter "98101-1234"\n5. Verify no validation error',
+        expected_results: 'Both formats accepted: 5-digit (98101) and ZIP+4 (98101-1234)',
+        context_hint: 'When entering address ZIP codes',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC07',
+        title: 'Verify ZIP validation rejects invalid formats',
+        workflow_section: 'P4M',
+        workflow_order: 15,
+        test_type: 'negative',
+        test_steps: '1. Navigate to Step 2 - Clinic Information\n2. In clinic address ZIP field, enter "9810" (4 digits)\n3. Verify validation error appears\n4. Clear and enter "981011" (6 digits)\n5. Verify validation error appears\n6. Clear and enter "ABCDE" (letters)\n7. Verify validation error appears',
+        expected_results: 'Validation error displays for each invalid format',
+        context_hint: 'When entering address ZIP codes',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-FORM-003-TC08',
+        title: 'Verify phone validation accepts multiple formats',
+        workflow_section: 'P4M',
+        workflow_order: 16,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 2 - Clinic Information\n2. In clinic phone field, enter "5551234567" (no separators)\n3. Verify no validation error\n4. Clear and enter "555-123-4567" (dashes)\n5. Verify no validation error\n6. Clear and enter "555.123.4567" (dots)\n7. Verify no validation error',
+        expected_results: 'All three formats accepted without validation error',
+        context_hint: 'When entering phone numbers',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-FORM-004-TC01',
+        title: 'Verify Add button creates new repeatable item',
+        workflow_section: 'P4M',
+        workflow_order: 17,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Satellite Locations step\n2. Click "Add Satellite Location" button\n3. Verify new location form section appears\n4. Verify section titled "Location 1"\n5. Verify all location fields present\n6. Click Add again\n7. Verify "Location 2" appears',
+        expected_results: 'New location form appears with fields for name, Epic ID, address, phone, hours',
+        context_hint: 'When adding multiple items (locations, providers, etc.)',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-004-TC02',
+        title: 'Verify Remove button deletes item and renumbers',
+        workflow_section: 'P4M',
+        workflow_order: 18,
+        test_type: 'happy_path',
+        test_steps: '1. Add 3 satellite locations with data\n2. Click Remove button on Location 2\n3. Confirm removal if prompted\n4. Verify Location 2 is removed\n5. Verify Location 3 data now shows as Location 2\n6. Verify Location 1 data unchanged',
+        expected_results: 'Location 2 removed, Location 3 renumbered to Location 2',
+        context_hint: '',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-005-TC01',
+        title: 'Verify address composite renders all subfields',
+        workflow_section: 'P4M',
+        workflow_order: 19,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Clinic Information step\n2. Locate clinic address section\n3. Verify Street Address field present\n4. Verify City field present\n5. Verify State is a dropdown with all US states\n6. Verify ZIP Code field present\n7. Enter valid address and verify data saved together',
+        expected_results: 'Address fields grouped together: Street, City, State dropdown, ZIP code',
+        context_hint: 'Check grouped field sections (address, contact info)',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-FORM-005-TC02',
+        title: 'Verify contact composite renders all subfields',
+        workflow_section: 'P4M',
+        workflow_order: 20,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Contacts step\n2. Locate Primary Contact section\n3. Verify all contact fields present\n4. Verify Preferred Channel has Email, Phone, Teams options\n5. Verify Preferred Time has Morning, Afternoon, Anytime options',
+        expected_results: 'Contact section shows: Name, Title, Email, Phone, Preferred Channel dropdown, Preferred Time dropdown',
+        context_hint: 'Check grouped field sections (address, contact info)',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-004-TC01',
+        title: 'Verify Genetic Counselor contact fields display',
+        workflow_section: 'P4M',
+        workflow_order: 21,
+        test_type: 'happy_path',
+        test_steps: '1. Load the onboarding form\n2. Navigate to Step 4 - Contacts\n3. Locate the Genetic Counselor section\n4. Verify all three fields are present and marked required',
+        expected_results: 'Genetic Counselor section displays with Name, Email, and Phone fields, all marked as required with red asterisks',
+        context_hint: 'In Step 4 - Contacts section',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-004-TC02',
+        title: 'Verify Genetic Counselor field order in form',
+        workflow_section: 'P4M',
+        workflow_order: 22,
+        test_type: 'validation',
+        test_steps: '1. Load the onboarding form\n2. Navigate to Step 4 - Contacts\n3. Review field order on the page\n4. Verify Genetic Counselor appears after Clinic Champion',
+        expected_results: 'Genetic Counselor section appears immediately after Clinic Champion section, before Primary Contact',
+        context_hint: 'In Step 4 - Contacts section',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-005-TC01',
+        title: 'Verify Program Champion fields are optional',
+        workflow_section: 'P4M',
+        workflow_order: 23,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 5 - Key Stakeholders\n2. Leave Program Champion fields blank (name, title, email)\n3. Click Next\n4. Verify form proceeds to Step 6',
+        expected_results: 'Form proceeds to next step without Program Champion information',
+        context_hint: 'In Step 5 - Key Stakeholders',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-006-TC01',
+        title: 'Verify lab configuration varies by program',
+        workflow_section: 'P4M',
+        workflow_order: 24,
+        test_type: 'happy_path',
+        test_steps: '1. With P4M selected, go to Lab Configuration\n2. Verify Lab Partner shows Ambry Genetics\n3. Verify Indication field is visible\n4. Verify Criteria for Testing field is visible\n5. Go back to Step 1, select GRX\n6. Return to Lab Configuration\n7. Verify Lab Partner shows Helix\n8. Verify Indication field is NOT visible',
+        expected_results: 'Lab partner shows Ambry for P4M, Helix for GRX; conditional fields show/hide correctly',
+        context_hint: 'In Step 6 - Lab Configuration',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-006-TC02',
+        title: 'Verify sample type checkbox label is correctly worded',
+        workflow_section: 'P4M',
+        workflow_order: 25,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 6 - Lab Configuration\n2. Locate the sample type section\n3. Verify checkbox exists with label "Offer additional sample type options"\n4. Verify checking the box reveals alternate specimen type dropdown',
+        expected_results: 'Checkbox displays with label "Offer additional sample type options"',
+        context_hint: 'In Step 6 - Lab Configuration',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-007-TC01',
+        title: 'Verify test products filtered by program',
+        workflow_section: 'P4M',
+        workflow_order: 26,
+        test_type: 'happy_path',
+        test_steps: '1. With P4M selected, go to Test Products\n2. Click Add Test Product\n3. Open Test Name dropdown\n4. Verify only P4M-compatible tests shown\n5. Select a test and add modifications\n6. Add second test product\n7. Verify both saved correctly',
+        expected_results: 'Test products filtered to show only options valid for selected program',
+        context_hint: 'In Step 7 - Test Products',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-007-TC02',
+        title: 'Verify Ambry test options display in dropdown',
+        workflow_section: 'P4M',
+        workflow_order: 27,
+        test_type: 'happy_path',
+        test_steps: '1. Load the onboarding form\n2. Navigate to Step 7 - Test Products\n3. Click on test panel dropdown\n4. Verify all 5 Ambry test options are listed',
+        expected_results: 'Dropdown displays all 5 Ambry test options: CustomNext-Cancer®, CancerNext-Expanded® +RNAinsight®, CancerNext-Expanded®, CancerNext-Expanded® + Limited Evidence Genes +RNAinsight®, CancerNext-Expanded® + Limited Evidence Genes',
+        context_hint: '',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-007-TC03',
+        title: 'Verify test code auto-populates on selection',
+        workflow_section: 'P4M',
+        workflow_order: 28,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 7 - Test Products\n2. Select "CancerNext-Expanded® +RNAinsight®" from dropdown\n3. Verify test code field auto-populates with "8875-R"\n4. Attempt to edit the test code field\n5. Verify field is read-only',
+        expected_results: 'Test code field displays "8875-R" and is read-only (not editable by user)',
+        context_hint: '',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-008-TC01',
+        title: 'Verify provider entry with valid NPI',
+        workflow_section: 'P4M',
+        workflow_order: 29,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Ordering Providers step\n2. Enter Provider Name: "Dr. Jane Smith"\n3. Enter NPI: "1234567890"\n4. Select Specialty from dropdown\n5. Click Add Provider\n6. Add second provider\n7. Click Next\n8. Verify form proceeds with valid data',
+        expected_results: 'Provider added with valid NPI, form proceeds to next step',
+        context_hint: 'When entering provider NPI numbers',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-010-TC01',
+        title: 'Verify provider filter fields appear when checkbox checked',
+        workflow_section: 'P4M',
+        workflow_order: 30,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 9 - Extract Filtering\n2. Locate "Filter by provider" checkbox\n3. Check the checkbox\n4. Verify provider input section appears\n5. Verify First Name field is visible and required\n6. Verify Last Name field is visible and required',
+        expected_results: 'Repeatable provider section appears with First Name and Last Name fields, both marked required',
+        context_hint: 'In Step 9 - Extract Filtering',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-010-TC02',
+        title: 'Verify provider list mandatory when filter checkbox checked',
+        workflow_section: 'P4M',
+        workflow_order: 31,
+        test_type: 'negative',
+        test_steps: '1. Navigate to Step 9 - Extract Filtering\n2. Check "Filter by provider" checkbox\n3. Leave First Name and Last Name fields empty\n4. Click Next\n5. Verify validation error prevents navigation',
+        expected_results: 'Validation error prevents navigation: "At least one provider is required when filtering by provider"',
+        context_hint: 'In Step 9 - Extract Filtering',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-010-TC03',
+        title: 'Verify Add Provider button creates additional entry',
+        workflow_section: 'P4M',
+        workflow_order: 32,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 9 - Extract Filtering\n2. Check "Filter by provider" checkbox\n3. Enter first provider: First Name = "Jane", Last Name = "Smith"\n4. Click "Add Provider" button\n5. Verify second provider entry appears',
+        expected_results: 'Second provider entry appears with First Name and Last Name fields',
+        context_hint: 'In Step 8 - Ordering Providers',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-009-TC01',
+        title: 'Verify review displays all data with edit navigation',
+        workflow_section: 'P4M',
+        workflow_order: 33,
+        test_type: 'happy_path',
+        test_steps: '1. Complete all form steps with test data\n2. Navigate to Review step\n3. Verify Program Selection section shows selected program\n4. Verify Clinic Information section shows entered data\n5. Verify each section has an Edit button\n6. Click Edit on Clinic Information\n7. Verify navigates back to Step 2',
+        expected_results: 'Review page shows all entered data organized by section with Edit buttons',
+        context_hint: 'On the final Review step',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-STEP-009-TC02',
+        title: 'Verify Word document download button works',
+        workflow_section: 'P4M',
+        workflow_order: 34,
+        test_type: 'happy_path',
+        test_steps: '1. Complete form through all steps\n2. Navigate to Step 10 - Review and Download\n3. Click "Download Word Document" button\n4. Verify .docx file downloads\n5. Verify filename includes clinic name and date',
+        expected_results: 'Word document (.docx) downloads with filename format: {clinic-name}-onboarding-YYYY-MM-DD.docx',
+        context_hint: 'Test the Word document download on Review step',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-STEP-009-TC03',
+        title: 'Verify Word document contains all form sections',
+        workflow_section: 'P4M',
+        workflow_order: 35,
+        test_type: 'validation',
+        test_steps: '1. Download Word document from completed form\n2. Open document in Microsoft Word\n3. Verify document contains Program Selection\n4. Verify document contains Clinic Information (name, address, phone)\n5. Verify document contains Contacts section\n6. Verify document contains Stakeholders section\n7. Verify document contains Lab Configuration\n8. Verify document contains Test Products\n9. Verify document contains Ordering Providers\n10. Verify document contains Extract Filtering settings\n11. Verify all data matches what was entered in the form',
+        expected_results: 'Word document contains all sections with accurate data from form entries',
+        context_hint: 'Test the Word document download on Review step',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-EXPORT-001-TC01',
+        title: 'Verify JSON export structure matches schema',
+        workflow_section: 'P4M',
+        workflow_order: 36,
+        test_type: 'happy_path',
+        test_steps: '1. Complete form with test data\n2. Navigate to Review step\n3. Click "Download JSON" button\n4. Open downloaded file\n5. Verify valid JSON (parseable)\n6. Verify schema_version present\n7. Verify submitted_at timestamp\n8. Verify structure matches sample files',
+        expected_results: 'Valid JSON file downloaded with correct structure matching sample-p4m.json format',
+        context_hint: 'Test the JSON export on Review step',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-UI-001-TC01',
+        title: 'Verify progress indicator shows correct step',
+        workflow_section: 'P4M',
+        workflow_order: 37,
+        test_type: 'happy_path',
+        test_steps: '1. Complete Steps 1-2\n2. Navigate to Step 3\n3. Verify progress shows "Step 3 of 9"\n4. Verify current step title displayed\n5. Verify steps 1-2 show as completed\n6. Verify step 3 highlighted as current\n7. Verify steps 4-9 shown but not active',
+        expected_results: 'Progress indicator shows "Step 3 of 9" with step title and visual progress',
+        context_hint: 'Watch the progress indicator as you navigate',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-UI-002-TC01',
+        title: 'Verify Previous/Next navigation works correctly',
+        workflow_section: 'P4M',
+        workflow_order: 38,
+        test_type: 'happy_path',
+        test_steps: '1. Open form at Step 1\n2. Verify Previous button NOT visible\n3. Select program and click Next\n4. Verify now on Step 2\n5. Verify Previous button now visible\n6. Click Previous\n7. Verify returned to Step 1\n8. Select program, complete form to Step 8\n9. Verify Next button says "Review"',
+        expected_results: 'Previous/Next buttons navigate correctly, Previous hidden on Step 1',
+        context_hint: 'Test the Previous/Next buttons throughout the form',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-UI-003-TC01',
+        title: 'Verify branding consistency across form',
+        workflow_section: 'P4M',
+        workflow_order: 39,
+        test_type: 'happy_path',
+        test_steps: '1. Open form\n2. Verify header displays "Propel Health"\n3. Verify headers use navy color (#1a365d)\n4. Verify buttons use teal color (#4a9aba)\n5. Navigate through all steps\n6. Verify consistent styling throughout\n7. Check for any visual bugs or misaligned elements',
+        expected_results: 'Consistent branding with navy headers, teal accents, professional appearance',
+        context_hint: 'Check visual consistency on every step',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC01',
+        title: 'Verify gene selector appears for CustomNext-Cancer selection',
+        workflow_section: 'GRX',
+        workflow_order: 1,
+        test_type: 'happy_path',
+        test_steps: '1. Navigate to Step 7 - Test Products\n2. Select "CustomNext-Cancer®" from test panel dropdown\n3. Verify gene selector component appears\n4. Verify component contains: search input, gene checkbox list, selected genes area',
+        expected_results: 'Gene selector component appears below the test dropdown with search input, gene checkbox list, and selected genes area',
+        context_hint: 'Test the Previous/Next buttons throughout the form',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC02',
+        title: 'Verify gene selector hidden for non-CustomNext tests',
+        workflow_section: 'GRX',
+        workflow_order: 2,
+        test_type: 'negative',
+        test_steps: '1. Navigate to Step 7 - Test Products\n2. Select "CancerNext-Expanded®" from dropdown\n3. Verify gene selector component is NOT visible\n4. Change selection to "CancerNext-Expanded® +RNAinsight®"\n5. Verify gene selector still not visible',
+        expected_results: 'Gene selector is not visible when non-CustomNext test is selected',
+        context_hint: 'Test the Previous/Next buttons throughout the form',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC03',
+        title: 'Verify search filter reduces gene list',
+        workflow_section: 'GRX',
+        workflow_order: 3,
+        test_type: 'happy_path',
+        test_steps: '1. Select CustomNext-Cancer® to show gene selector\n2. Type "BRCA" in the search input field\n3. Verify gene list filters in real-time\n4. Verify only BRCA1 and BRCA2 are visible in the checkbox list',
+        expected_results: 'Gene list filters to show only BRCA1 and BRCA2, other genes are hidden',
+        context_hint: 'In Step 9 - Extract Filtering',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC04',
+        title: 'Verify Select All button functionality',
+        workflow_section: 'GRX',
+        workflow_order: 4,
+        test_type: 'happy_path',
+        test_steps: '1. Select CustomNext-Cancer® to show gene selector\n2. Verify count shows "0 of 90 genes selected"\n3. Click "Select All" button\n4. Verify count updates to "90 of 90 genes selected"\n5. Verify all gene chips appear in selected genes area',
+        expected_results: 'All 90 genes become selected, count shows "90 of 90 genes selected", all genes appear as chips in selected area',
+        context_hint: '',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC05',
+        title: 'Verify Clear All button functionality',
+        workflow_section: 'GRX',
+        workflow_order: 5,
+        test_type: 'happy_path',
+        test_steps: '1. Select CustomNext-Cancer® to show gene selector\n2. Select several genes (BRCA1, BRCA2, ATM, CHEK2)\n3. Verify count shows "4 of 90 genes selected"\n4. Click "Clear All" button\n5. Verify count resets to "0 of 90 genes selected"\n6. Verify selected genes area is empty',
+        expected_results: 'All selections cleared, count shows "0 of 90 genes selected", selected genes area is empty',
+        context_hint: 'Click Start Over button in the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC06',
+        title: 'Verify gene chip removal via X button',
+        workflow_section: 'GRX',
+        workflow_order: 6,
+        test_type: 'happy_path',
+        test_steps: '1. Select CustomNext-Cancer® and select BRCA1, BRCA2, ATM\n2. Verify count shows "3 of 90 genes selected"\n3. Locate BRCA1 chip in selected genes area\n4. Click the X button on the BRCA1 chip\n5. Verify BRCA1 chip is removed\n6. Verify count updates to "2 of 90 genes selected"\n7. Verify BRCA1 checkbox in the list is now unchecked',
+        expected_results: 'BRCA1 chip is removed, count updates to "2 of 90 genes selected", BRCA1 checkbox becomes unchecked in the list',
+        context_hint: 'Select CustomNext-Cancer in Test Products to see gene selector',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC07',
+        title: 'Verify validation requires at least one gene selected',
+        workflow_section: 'GRX',
+        workflow_order: 7,
+        test_type: 'negative',
+        test_steps: '1. Select CustomNext-Cancer® to show gene selector\n2. Do not select any genes (count shows "0 of 90")\n3. Click "Next" button to proceed\n4. Verify validation error message appears\n5. Verify user cannot advance to next step',
+        expected_results: 'Form displays validation error "At least one gene must be selected", user cannot proceed to next step',
+        context_hint: 'Select CustomNext-Cancer in Test Products to see gene selector',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-GENE-001-TC08',
+        title: 'Verify JSON output includes selected genes array',
+        workflow_section: 'GRX',
+        workflow_order: 8,
+        test_type: 'validation',
+        test_steps: '1. Complete form with CustomNext-Cancer® selected\n2. Select genes: ATM, BRCA1, CHEK2\n3. Navigate to Review step\n4. Download JSON output\n5. Open JSON file and verify test_panel structure\n6. Verify selected_genes array contains selected genes alphabetically\n7. Verify gene_count matches array length',
+        expected_results: 'JSON output contains test_panel object with: test_name="CustomNext-Cancer®", test_code="9511", selected_genes=["ATM","BRCA1","CHEK2"], gene_count=3',
+        context_hint: 'Select CustomNext-Cancer in Test Products to see gene selector',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-001-TC02',
+        title: 'Verify auto-save indicator displays timestamp',
+        workflow_section: 'DRAFT',
+        workflow_order: 1,
+        test_type: 'happy_path',
+        test_steps: '1. Open form in browser\n2. Select a program\n3. Navigate to Step 2\n4. Enter any field value\n5. Look at save status bar at top of form\n6. Verify auto-save indicator shows timestamp',
+        expected_results: '"Auto-saved at [current time]" indicator visible with green checkmark',
+        context_hint: 'Wait a moment after entering data and check the status bar',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-SAVE-001-TC03',
+        title: 'Auto-save triggers on field change',
+        workflow_section: 'DRAFT',
+        workflow_order: 2,
+        test_type: 'happy_path',
+        test_steps: '1. Select a program (e.g., P4M)\n2. Click Next to go to step 2\n3. Enter text in Clinic Name field\n4. Observe the save status bar',
+        expected_results: 'Save status bar displays "Auto-saved at [current time]" within 1-2 seconds of typing',
+        context_hint: 'Wait a moment after entering data and check the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-001-TC04',
+        title: 'Auto-save stores correct data structure in localStorage',
+        workflow_section: 'DRAFT',
+        workflow_order: 3,
+        test_type: 'validation',
+        test_steps: '1. Fill out program selection and clinic name\n2. Open browser DevTools (F12)\n3. Go to Application tab > Local Storage\n4. Find the propel-onboarding-draft key\n5. Inspect the stored JSON value',
+        expected_results: 'Opening browser DevTools > Application > localStorage shows key "propel-onboarding-draft" with JSON containing formData, currentStep, savedAt, and version fields',
+        context_hint: 'Wait a moment after entering data and check the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-001-TC05',
+        title: 'Auto-save captures current step position',
+        workflow_section: 'DRAFT',
+        workflow_order: 4,
+        test_type: 'validation',
+        test_steps: '1. Complete steps 1-3 with valid data\n2. Navigate to step 4 (Contacts)\n3. Enter primary contact name\n4. Check localStorage value in DevTools\n5. Verify currentStep value',
+        expected_results: 'localStorage JSON shows currentStep matching the step number user navigated to (e.g., currentStep: 4 for Contacts)',
+        context_hint: 'Wait a moment after entering data and check the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-002-TC04',
+        title: 'Restore prompt appears when saved data exists',
+        workflow_section: 'DRAFT',
+        workflow_order: 5,
+        test_type: 'happy_path',
+        test_steps: '1. Fill out form through step 3 with valid data\n2. Close the browser tab\n3. Open a new tab and navigate to the form URL\n4. Observe the page load',
+        expected_results: 'Modal appears with title "Resume Previous Session?", displays saved date/time, and shows "Resume Draft" and "Start Fresh" buttons',
+        context_hint: 'Close and reopen the form to test resume',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-002-TC05',
+        title: 'Resume Draft restores data and step position',
+        workflow_section: 'DRAFT',
+        workflow_order: 6,
+        test_type: 'happy_path',
+        test_steps: '1. With restore prompt displayed, click "Resume Draft"\n2. Verify the form data is restored (program, clinic name, etc.)\n3. Verify the current step matches where you left off',
+        expected_results: 'Form loads with all previously entered data populated and user is on step 3 (the step they were on when they left)',
+        context_hint: 'Close and reopen the form to test resume',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-002-TC06',
+        title: 'Start Fresh clears saved data',
+        workflow_section: 'DRAFT',
+        workflow_order: 7,
+        test_type: 'happy_path',
+        test_steps: '1. With restore prompt displayed, click "Start Fresh"\n2. Verify the form starts at step 1 with empty fields\n3. Refresh the page\n4. Verify no restore prompt appears',
+        expected_results: 'Form starts at step 1 with all fields empty. localStorage is cleared. No restore prompt appears on next page refresh.',
+        context_hint: 'Click Start Over button in the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-002-TC07',
+        title: 'No restore prompt when no saved data exists',
+        workflow_section: 'DRAFT',
+        workflow_order: 8,
+        test_type: 'negative',
+        test_steps: '1. Clear localStorage or open incognito window\n2. Navigate to the form URL\n3. Observe the page load',
+        expected_results: 'Form loads directly to step 1 with no modal prompt. User can immediately begin filling out the form.',
+        context_hint: 'Close and reopen the form to test resume',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-003-TC03',
+        title: 'Save Draft downloads JSON file',
+        workflow_section: 'DRAFT',
+        workflow_order: 9,
+        test_type: 'happy_path',
+        test_steps: '1. Fill out program selection (P4M)\n2. Fill out clinic information (name, address)\n3. Click "Save Draft" button in the status bar\n4. Observe the file download',
+        expected_results: 'JSON file downloads with filename "propel-onboarding-draft-YYYY-MM-DD.json" (e.g., propel-onboarding-draft-2025-01-08.json)',
+        context_hint: 'Click Save Draft button in the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-003-TC04',
+        title: 'Downloaded file contains correct JSON structure',
+        workflow_section: 'DRAFT',
+        workflow_order: 10,
+        test_type: 'validation',
+        test_steps: '1. Download a draft file using Save Draft\n2. Open the downloaded .json file in a text editor\n3. Verify JSON structure contains required fields\n4. Verify formData contains the values entered in the form',
+        expected_results: 'JSON file contains: formData object with all entered values, currentStep number, savedAt ISO timestamp, version "1.0", isDraft: true',
+        context_hint: 'Click Save Draft button in the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-004-TC03',
+        title: 'Load Draft restores form from file',
+        workflow_section: 'DRAFT',
+        workflow_order: 11,
+        test_type: 'happy_path',
+        test_steps: '1. Click "Load Draft" button in the status bar\n2. Select the previously downloaded draft JSON file\n3. Observe the form state after file loads',
+        expected_results: 'Form populates with all data from the draft file and navigates to the step that was saved in the file',
+        context_hint: 'Close and reopen the form to test resume',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-004-TC04',
+        title: 'Invalid file shows error message',
+        workflow_section: 'DRAFT',
+        workflow_order: 12,
+        test_type: 'negative',
+        test_steps: '1. Click "Load Draft" button\n2. Select an invalid file (e.g., a .txt file or corrupted JSON)\n3. Observe the error handling',
+        expected_results: 'Alert message displays: "Unable to read file. Please select a valid Propel onboarding draft (.json)." Form remains unchanged.',
+        context_hint: '',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-004-TC05',
+        title: 'Load Draft works across different browsers',
+        workflow_section: 'DRAFT',
+        workflow_order: 13,
+        test_type: 'edge_case',
+        test_steps: '1. In Chrome, fill out form and click "Save Draft"\n2. Open Firefox browser\n3. Navigate to the form URL\n4. Click "Load Draft" and select the file saved from Chrome\n5. Verify form data is restored correctly',
+        expected_results: 'Draft file loads successfully and form is populated correctly in Firefox, even though the file was created in Chrome',
+        context_hint: 'Click Load Draft button in the status bar',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-SAVE-005-TC03',
+        title: 'Start Over shows confirmation modal',
+        workflow_section: 'DRAFT',
+        workflow_order: 14,
+        test_type: 'happy_path',
+        test_steps: '1. Fill out form through step 3 with valid data\n2. Click "Start Over" button in the status bar\n3. Observe the confirmation modal',
+        expected_results: 'Confirmation modal appears with warning message and two buttons: "Cancel" and "Clear All"',
+        context_hint: 'Click Start Over button in the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-005-TC04',
+        title: 'Confirming Clear All resets form completely',
+        workflow_section: 'DRAFT',
+        workflow_order: 15,
+        test_type: 'happy_path',
+        test_steps: '1. With confirmation modal displayed, click "Clear All"\n2. Verify form returns to step 1\n3. Verify all fields are empty\n4. Check localStorage in DevTools to confirm it is cleared',
+        expected_results: 'Form resets to step 1 with all fields empty. localStorage is cleared. Auto-save indicator resets to "Your progress will be saved automatically"',
+        context_hint: 'Click Start Over button in the status bar',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-005-TC05',
+        title: 'Cancel returns to form without changes',
+        workflow_section: 'DRAFT',
+        workflow_order: 16,
+        test_type: 'happy_path',
+        test_steps: '1. With confirmation modal displayed, click "Cancel"\n2. Verify modal closes\n3. Verify form data is still present\n4. Verify user is still on the same step',
+        expected_results: 'Modal closes and form remains unchanged with all data intact. User stays on the same step.',
+        context_hint: '',
+        priority: 'Must Have'
+      },
+      {
+        test_id: 'ONB-SAVE-006-TC02',
+        title: 'Help icon expands informational panel',
+        workflow_section: 'EDGE',
+        workflow_order: 1,
+        test_type: 'happy_path',
+        test_steps: '1. Locate the help icon (?) in the status bar\n2. Click the help icon\n3. Observe the expanded panel',
+        expected_results: 'Informational panel expands below the status bar with explanations of Auto-save, Save Draft, and Load Draft functionality',
+        context_hint: 'Click the (?) help icon in the status bar',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-SAVE-006-TC03',
+        title: 'Help icon toggles panel closed',
+        workflow_section: 'EDGE',
+        workflow_order: 2,
+        test_type: 'happy_path',
+        test_steps: '1. With help panel expanded, click the help icon (?) again\n2. Observe the panel collapse',
+        expected_results: 'Panel collapses and is no longer visible. Help icon remains clickable.',
+        context_hint: 'Click the (?) help icon in the status bar',
+        priority: 'Should Have'
+      },
+      {
+        test_id: 'ONB-SAVE-006-TC04',
+        title: 'Help content explains all save options and limitations',
+        workflow_section: 'EDGE',
+        workflow_order: 3,
+        test_type: 'validation',
+        test_steps: '1. Expand the help panel by clicking the (?) icon\n2. Read through the content\n3. Verify all three save methods are explained\n4. Verify the browser limitation note is present',
+        expected_results: 'Help panel contains: (1) Explanation that auto-save only works in same browser/device, (2) Description of Save Draft for cross-device access, (3) Description of Load Draft to restore from file, (4) Note about browser limitation clearly stated',
+        context_hint: 'Click the (?) help icon in the status bar',
+        priority: 'Should Have'
+      }
+    ];
 
-        const TYPE_BADGES = {
-            'happy_path': 'bg-green-100 text-green-700',
-            'negative': 'bg-red-100 text-red-700',
-            'validation': 'bg-blue-100 text-blue-700',
-            'edge_case': 'bg-purple-100 text-purple-700',
-        };
+    // =====================================================
+    // COMPONENT: Section Header with Guidance
+    // =====================================================
+    const SectionHeader = ({ section, tests, isExpanded, onToggle }) => {
+      const sectionTests = tests.filter(t => t.workflow_section === section.code);
+      const completed = sectionTests.filter(t => t.test_status !== 'Not Run').length;
+      const passed = sectionTests.filter(t => t.test_status === 'Pass').length;
+      const failed = sectionTests.filter(t => t.test_status === 'Fail').length;
+      const total = sectionTests.length;
+      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-        // =====================================================================
-        // MAIN APP COMPONENT
-        // =====================================================================
-        function App() {
-            const [testCases, setTestCases] = useState(() => {
-                const saved = localStorage.getItem('onb_uat_tracker');
-                if (saved) {
-                    const data = JSON.parse(saved);
-                    return data.testCases || TEST_CASES_DATA.map(tc => ({ ...tc, test_status: 'Not Run' }));
-                }
-                return TEST_CASES_DATA.map(tc => ({ ...tc, test_status: 'Not Run' }));
-            });
+      // Don't render sections with no tests
+      if (total === 0) return null;
 
-            const [notes, setNotes] = useState(() => {
-                const saved = localStorage.getItem('onb_uat_tracker');
-                if (saved) {
-                    const data = JSON.parse(saved);
-                    return data.notes || {};
-                }
-                return {};
-            });
-
-            const [timestamps, setTimestamps] = useState(() => {
-                const saved = localStorage.getItem('onb_uat_tracker');
-                if (saved) {
-                    const data = JSON.parse(saved);
-                    return data.timestamps || {};
-                }
-                return {};
-            });
-
-            const [testerName, setTesterName] = useState(() => {
-                const saved = localStorage.getItem('onb_uat_tracker');
-                if (saved) {
-                    const data = JSON.parse(saved);
-                    return data.testerName || 'Glen Lewis';
-                }
-                return 'Glen Lewis';
-            });
-
-            const [expandedTests, setExpandedTests] = useState({});
-            const [expandedCategories, setExpandedCategories] = useState(() => {
-                const cats = {};
-                Object.keys(CATEGORY_INFO).forEach(cat => cats[cat] = true);
-                return cats;
-            });
-
-            // Auto-save to localStorage
-            useEffect(() => {
-                const data = {
-                    testCases,
-                    notes,
-                    timestamps,
-                    testerName,
-                    cycleInfo: { name: 'ONB Questionnaire v1', target_date: '2025-05-02', cycle_id: 'UAT-ONB-853A06E9' },
-                    lastUpdated: new Date().toISOString()
-                };
-                localStorage.setItem('onb_uat_tracker', JSON.stringify(data));
-            }, [testCases, notes, timestamps, testerName]);
-
-            // Calculate stats
-            const stats = useMemo(() => {
-                const counts = { 'Not Run': 0, 'Pass': 0, 'Fail': 0, 'Blocked': 0, 'Skipped': 0 };
-                testCases.forEach(tc => counts[tc.test_status]++);
-                const executed = counts.Pass + counts.Fail + counts.Blocked + counts.Skipped;
-                const executionPct = Math.round((executed / testCases.length) * 100);
-                return { ...counts, total: testCases.length, executed, executionPct };
-            }, [testCases]);
-
-            // Group by category
-            const byCategory = useMemo(() => {
-                const grouped = {};
-                testCases.forEach(tc => {
-                    if (!grouped[tc.category]) grouped[tc.category] = [];
-                    grouped[tc.category].push(tc);
-                });
-                return grouped;
-            }, [testCases]);
-
-            const updateStatus = (testId, newStatus) => {
-                setTestCases(prev => prev.map(tc =>
-                    tc.test_id === testId ? { ...tc, test_status: newStatus } : tc
-                ));
-                setTimestamps(prev => ({ ...prev, [testId]: new Date().toISOString() }));
-            };
-
-            const updateNote = (testId, note) => {
-                setNotes(prev => ({ ...prev, [testId]: note }));
-            };
-
-            const toggleExpand = (testId) => {
-                setExpandedTests(prev => ({ ...prev, [testId]: !prev[testId] }));
-            };
-
-            const toggleCategory = (category) => {
-                setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
-            };
-
-            const exportResults = () => {
-                const results = testCases.map(tc => ({
-                    test_id: tc.test_id,
-                    title: tc.title,
-                    category: tc.category,
-                    test_status: tc.test_status,
-                    tested_by: tc.test_status !== 'Not Run' ? testerName : null,
-                    tested_date: timestamps[tc.test_id] || null,
-                    notes: notes[tc.test_id] || null
-                }));
-
-                const exportData = {
-                    cycle_info: { name: 'ONB Questionnaire v1', target_date: '2025-05-02', cycle_id: 'UAT-ONB-853A06E9' },
-                    tester: testerName,
-                    exported_at: new Date().toISOString(),
-                    summary: {
-                        total: stats.total,
-                        executed: stats.executed,
-                        passed: stats.Pass,
-                        failed: stats.Fail,
-                        blocked: stats.Blocked,
-                        skipped: stats.Skipped,
-                        executionPct: stats.executionPct
-                    },
-                    results
-                };
-
-                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `onb-uat-results-${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
-            };
-
-            const resetAll = () => {
-                if (confirm('Are you sure you want to reset all test results? This cannot be undone.')) {
-                    setTestCases(TEST_CASES_DATA.map(tc => ({ ...tc, test_status: 'Not Run' })));
-                    setNotes({});
-                    setTimestamps({});
-                }
-            };
-
-            return (
-                <div className="max-w-6xl mx-auto py-6 px-4">
-                    {/* Header */}
-                    <div className="mb-6">
-                        <a href="index.html" className="text-propel-teal hover:underline text-sm mb-2 inline-block">&larr; Back to UAT Tools</a>
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                            <div>
-                                <h1 className="text-2xl font-bold text-propel-navy">ONB Questionnaire v1</h1>
-                                <p className="text-gray-600">Target: May 2, 2025 &bull; Cycle: UAT-ONB-853A06E9</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="text"
-                                    value={testerName}
-                                    onChange={(e) => setTesterName(e.target.value)}
-                                    className="border rounded px-3 py-1.5 text-sm w-40"
-                                    placeholder="Tester name"
-                                />
-                                <button onClick={exportResults} className="bg-propel-teal text-white px-4 py-1.5 rounded text-sm hover:bg-opacity-90">
-                                    Export JSON
-                                </button>
-                                <button onClick={resetAll} className="bg-gray-200 text-gray-700 px-4 py-1.5 rounded text-sm hover:bg-gray-300">
-                                    Reset
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Progress Dashboard */}
-                    <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-                        <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-                            <div className="flex-1">
-                                <div className="flex justify-between text-sm mb-1">
-                                    <span className="font-medium">Execution Progress</span>
-                                    <span>{stats.executionPct}% ({stats.executed}/{stats.total})</span>
-                                </div>
-                                <div className="h-4 bg-gray-200 rounded-full overflow-hidden flex">
-                                    <div className="bg-green-500 h-full" style={{ width: `${(stats.Pass / stats.total) * 100}%` }}></div>
-                                    <div className="bg-red-500 h-full" style={{ width: `${(stats.Fail / stats.total) * 100}%` }}></div>
-                                    <div className="bg-amber-500 h-full" style={{ width: `${(stats.Blocked / stats.total) * 100}%` }}></div>
-                                    <div className="bg-blue-400 h-full" style={{ width: `${(stats.Skipped / stats.total) * 100}%` }}></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-5 gap-2 text-center text-sm">
-                            <div className="bg-gray-100 rounded p-2">
-                                <div className="text-2xl font-bold text-gray-700">{stats['Not Run']}</div>
-                                <div className="text-gray-500">Not Run</div>
-                            </div>
-                            <div className="bg-green-100 rounded p-2">
-                                <div className="text-2xl font-bold text-green-700">{stats.Pass}</div>
-                                <div className="text-green-600">Pass</div>
-                            </div>
-                            <div className="bg-red-100 rounded p-2">
-                                <div className="text-2xl font-bold text-red-700">{stats.Fail}</div>
-                                <div className="text-red-600">Fail</div>
-                            </div>
-                            <div className="bg-amber-100 rounded p-2">
-                                <div className="text-2xl font-bold text-amber-700">{stats.Blocked}</div>
-                                <div className="text-amber-600">Blocked</div>
-                            </div>
-                            <div className="bg-blue-100 rounded p-2">
-                                <div className="text-2xl font-bold text-blue-700">{stats.Skipped}</div>
-                                <div className="text-blue-600">Skipped</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Test Cases by Category */}
-                    {Object.entries(byCategory).sort().map(([category, tests]) => {
-                        const catInfo = CATEGORY_INFO[category] || { name: category, description: '', color: 'gray' };
-                        const catStats = {
-                            total: tests.length,
-                            passed: tests.filter(t => t.test_status === 'Pass').length,
-                            executed: tests.filter(t => t.test_status !== 'Not Run').length
-                        };
-
-                        return (
-                            <div key={category} className="bg-white rounded-lg shadow-md mb-4 overflow-hidden">
-                                <button
-                                    onClick={() => toggleCategory(category)}
-                                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-lg">{expandedCategories[category] ? '▼' : '▶'}</span>
-                                        <div>
-                                            <span className="font-semibold text-propel-navy">{catInfo.name}</span>
-                                            <span className="text-gray-500 ml-2 text-sm">({category})</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-sm text-gray-600">
-                                        {catStats.passed}/{catStats.total} passed &bull; {catStats.executed}/{catStats.total} executed
-                                    </div>
-                                </button>
-
-                                {expandedCategories[category] && (
-                                    <div className="divide-y">
-                                        {tests.map(test => (
-                                            <div key={test.test_id} className="border-l-4 border-transparent hover:border-propel-teal">
-                                                <div className="px-4 py-3 flex items-center gap-3">
-                                                    <button onClick={() => toggleExpand(test.test_id)} className="text-gray-400 hover:text-gray-600">
-                                                        {expandedTests[test.test_id] ? '▼' : '▶'}
-                                                    </button>
-                                                    <code className="text-xs text-gray-500 font-mono w-36 flex-shrink-0">{test.test_id}</code>
-                                                    <span className={`text-xs px-2 py-0.5 rounded ${TYPE_BADGES[test.test_type] || 'bg-gray-100'}`}>
-                                                        {test.test_type}
-                                                    </span>
-                                                    <span className="flex-1 text-sm">{test.title}</span>
-                                                    <div className="flex gap-1">
-                                                        <button onClick={() => updateStatus(test.test_id, 'Pass')}
-                                                            className={`w-8 h-8 rounded ${test.test_status === 'Pass' ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-green-100'}`}>✓</button>
-                                                        <button onClick={() => updateStatus(test.test_id, 'Fail')}
-                                                            className={`w-8 h-8 rounded ${test.test_status === 'Fail' ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-red-100'}`}>✗</button>
-                                                        <button onClick={() => updateStatus(test.test_id, 'Blocked')}
-                                                            className={`w-8 h-8 rounded ${test.test_status === 'Blocked' ? 'bg-amber-500 text-white' : 'bg-gray-100 hover:bg-amber-100'}`}>!</button>
-                                                        <button onClick={() => updateStatus(test.test_id, 'Skipped')}
-                                                            className={`w-8 h-8 rounded ${test.test_status === 'Skipped' ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-blue-100'}`}>−</button>
-                                                    </div>
-                                                </div>
-
-                                                {expandedTests[test.test_id] && (
-                                                    <div className="px-4 pb-4 ml-10 bg-gray-50 rounded-b">
-                                                        <div className="grid md:grid-cols-2 gap-4 mb-3">
-                                                            <div>
-                                                                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">Test Steps</h4>
-                                                                <div className="test-steps bg-white p-2 rounded border text-sm">{test.test_steps}</div>
-                                                            </div>
-                                                            <div>
-                                                                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">Expected Results</h4>
-                                                                <div className="test-steps bg-white p-2 rounded border text-sm">{test.expected_results}</div>
-                                                            </div>
-                                                        </div>
-                                                        {test.prerequisites && (
-                                                            <div className="mb-3">
-                                                                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">Prerequisites</h4>
-                                                                <div className="text-sm text-gray-700">{test.prerequisites}</div>
-                                                            </div>
-                                                        )}
-                                                        <div>
-                                                            <h4 className="text-xs font-semibold text-gray-500 uppercase mb-1">Notes</h4>
-                                                            <textarea
-                                                                value={notes[test.test_id] || ''}
-                                                                onChange={(e) => updateNote(test.test_id, e.target.value)}
-                                                                className="w-full border rounded p-2 text-sm"
-                                                                rows="2"
-                                                                placeholder="Add execution notes..."
-                                                            />
-                                                        </div>
-                                                        {timestamps[test.test_id] && (
-                                                            <div className="text-xs text-gray-400 mt-2">
-                                                                Tested: {new Date(timestamps[test.test_id]).toLocaleString()}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-
-                    {/* Footer */}
-                    <div className="text-center text-gray-500 text-sm mt-8">
-                        <p>Propel Health UAT Toolkit &bull; ONB Questionnaire v1</p>
-                        <p className="mt-1">Data auto-saved to browser localStorage</p>
-                    </div>
+      return (
+        <div className="bg-white rounded-lg shadow mb-4">
+          <button
+            onClick={onToggle}
+            className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{section.icon}</span>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">{section.name}</h2>
+                <p className="text-sm text-gray-500">{section.description}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-sm font-medium">
+                  <span className="text-green-600">{passed}✓</span>
+                  {failed > 0 && <span className="text-red-600 ml-2">{failed}✗</span>}
+                  <span className="text-gray-400 ml-2">{completed}/{total}</span>
                 </div>
-            );
+                <div className="w-24 h-2 bg-gray-200 rounded-full mt-1">
+                  <div
+                    className={`h-2 rounded-full ${pct === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+              <span className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                ▼
+              </span>
+            </div>
+          </button>
+
+          {isExpanded && (
+            <div className="px-4 pb-4">
+              <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mb-4">
+                <p className="text-sm text-blue-800 font-medium">How to test this section:</p>
+                <p className="text-sm text-blue-700 mt-1">{section.guidance}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // =====================================================
+    // COMPONENT: Test Case Row
+    // =====================================================
+    const TestCaseRow = ({ test, notes, onStatusChange, onNotesChange }) => {
+      const [expanded, setExpanded] = useState(false);
+
+      const typeColors = {
+        'happy_path': 'bg-green-100 text-green-700',
+        'negative': 'bg-red-100 text-red-700',
+        'validation': 'bg-blue-100 text-blue-700',
+        'edge_case': 'bg-purple-100 text-purple-700'
+      };
+
+      return (
+        <div className={`border rounded-lg mb-2 ${test.test_status === 'Fail' ? 'border-red-300' : 'border-gray-200'}`}>
+          <div className="p-3 flex items-center gap-3">
+            {/* Status indicator */}
+            <div className={`w-3 h-3 rounded-full ${
+              test.test_status === 'Pass' ? 'bg-green-500' :
+              test.test_status === 'Fail' ? 'bg-red-500' :
+              test.test_status === 'Blocked' ? 'bg-amber-500' :
+              test.test_status === 'Skipped' ? 'bg-blue-500' : 'bg-gray-300'
+            }`} />
+
+            {/* Test info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="text-xs text-gray-500">{test.test_id}</code>
+                <span className={`text-xs px-2 py-0.5 rounded ${typeColors[test.test_type] || 'bg-gray-100'}`}>
+                  {test.test_type.replace('_', ' ')}
+                </span>
+              </div>
+              <p className="text-sm font-medium text-gray-800 mt-1">{test.title}</p>
+              {test.context_hint && (
+                <p className="text-xs text-gray-500 italic mt-1">💡 {test.context_hint}</p>
+              )}
+            </div>
+
+            {/* Quick action buttons */}
+            <div className="flex gap-1">
+              <button
+                onClick={() => onStatusChange(test.test_id, 'Pass')}
+                className={`w-8 h-8 rounded ${test.test_status === 'Pass' ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-green-100'}`}
+                title="Pass"
+              >✓</button>
+              <button
+                onClick={() => onStatusChange(test.test_id, 'Fail')}
+                className={`w-8 h-8 rounded ${test.test_status === 'Fail' ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-red-100'}`}
+                title="Fail"
+              >✗</button>
+              <button
+                onClick={() => onStatusChange(test.test_id, 'Blocked')}
+                className={`w-8 h-8 rounded ${test.test_status === 'Blocked' ? 'bg-amber-500 text-white' : 'bg-gray-100 hover:bg-amber-100'}`}
+                title="Blocked"
+              >!</button>
+              <button
+                onClick={() => onStatusChange(test.test_id, 'Skipped')}
+                className={`w-8 h-8 rounded ${test.test_status === 'Skipped' ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-blue-100'}`}
+                title="Skip"
+              >−</button>
+            </div>
+
+            {/* Expand button */}
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-gray-400 hover:text-gray-600 px-2"
+            >
+              {expanded ? '▲' : '▼'}
+            </button>
+          </div>
+
+          {/* Expanded details */}
+          {expanded && (
+            <div className="px-3 pb-3 border-t bg-gray-50">
+              <div className="grid md:grid-cols-2 gap-4 mt-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase mb-1">Test Steps</p>
+                  <pre className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-2 rounded border">
+                    {test.test_steps}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase mb-1">Expected Results</p>
+                  <pre className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-2 rounded border">
+                    {test.expected_results}
+                  </pre>
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="text-xs font-medium text-gray-500 uppercase mb-1">Your Notes</p>
+                <textarea
+                  value={notes[test.test_id] || ''}
+                  onChange={(e) => onNotesChange(test.test_id, e.target.value)}
+                  placeholder="Add observations, issues found, or questions..."
+                  className="w-full p-2 border rounded text-sm"
+                  rows={2}
+                />
+              </div>
+              {test.tested_date && (
+                <p className="text-xs text-gray-400 mt-2">
+                  Tested: {new Date(test.tested_date).toLocaleString()}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // =====================================================
+    // COMPONENT: Progress Dashboard
+    // =====================================================
+    const ProgressDashboard = ({ tests }) => {
+      const stats = {
+        total: tests.length,
+        passed: tests.filter(t => t.test_status === 'Pass').length,
+        failed: tests.filter(t => t.test_status === 'Fail').length,
+        blocked: tests.filter(t => t.test_status === 'Blocked').length,
+        skipped: tests.filter(t => t.test_status === 'Skipped').length,
+        notRun: tests.filter(t => t.test_status === 'Not Run').length
+      };
+      stats.executed = stats.total - stats.notRun;
+      stats.pct = Math.round((stats.executed / stats.total) * 100);
+
+      return (
+        <div className="bg-white rounded-lg shadow p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-600">Overall Progress</span>
+            <span className="text-lg font-bold text-gray-800">{stats.pct}%</span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-4 bg-gray-200 rounded-full overflow-hidden flex">
+            {stats.passed > 0 && (
+              <div className="bg-green-500 h-full" style={{ width: `${(stats.passed/stats.total)*100}%` }} />
+            )}
+            {stats.failed > 0 && (
+              <div className="bg-red-500 h-full" style={{ width: `${(stats.failed/stats.total)*100}%` }} />
+            )}
+            {stats.blocked > 0 && (
+              <div className="bg-amber-500 h-full" style={{ width: `${(stats.blocked/stats.total)*100}%` }} />
+            )}
+            {stats.skipped > 0 && (
+              <div className="bg-blue-500 h-full" style={{ width: `${(stats.skipped/stats.total)*100}%` }} />
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="flex justify-between mt-3 text-sm">
+            <span className="text-green-600">✓ {stats.passed} Pass</span>
+            <span className="text-red-600">✗ {stats.failed} Fail</span>
+            <span className="text-amber-600">! {stats.blocked} Blocked</span>
+            <span className="text-blue-600">− {stats.skipped} Skipped</span>
+            <span className="text-gray-400">○ {stats.notRun} Not Run</span>
+          </div>
+        </div>
+      );
+    };
+
+    // =====================================================
+    // MAIN APP COMPONENT
+    // =====================================================
+    const App = () => {
+      // State
+      const [testCases, setTestCases] = useState(() => {
+        const saved = localStorage.getItem(UAT_CONFIG.localStorage_key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return parsed.testCases || TEST_CASES_DATA.map(t => ({ ...t, test_status: 'Not Run' }));
+        }
+        return TEST_CASES_DATA.map(t => ({ ...t, test_status: 'Not Run' }));
+      });
+
+      const [notes, setNotes] = useState(() => {
+        const saved = localStorage.getItem(UAT_CONFIG.localStorage_key);
+        return saved ? JSON.parse(saved).notes || {} : {};
+      });
+
+      const [testerName, setTesterName] = useState(() => {
+        const saved = localStorage.getItem(UAT_CONFIG.localStorage_key);
+        return saved ? JSON.parse(saved).testerName || UAT_CONFIG.tester_default : UAT_CONFIG.tester_default;
+      });
+
+      const [expandedSections, setExpandedSections] = useState(
+        WORKFLOW_SECTIONS.reduce((acc, s) => ({ ...acc, [s.code]: true }), {})
+      );
+
+      const [submitting, setSubmitting] = useState(false);
+      const [submitted, setSubmitted] = useState(false);
+
+      // Save to localStorage
+      useEffect(() => {
+        localStorage.setItem(UAT_CONFIG.localStorage_key, JSON.stringify({
+          testCases, notes, testerName, lastUpdated: new Date().toISOString()
+        }));
+      }, [testCases, notes, testerName]);
+
+      // Handlers
+      const handleStatusChange = (testId, status) => {
+        setTestCases(prev => prev.map(t =>
+          t.test_id === testId
+            ? { ...t, test_status: status, tested_date: new Date().toISOString() }
+            : t
+        ));
+      };
+
+      const handleNotesChange = (testId, note) => {
+        setNotes(prev => ({ ...prev, [testId]: note }));
+      };
+
+      const toggleSection = (code) => {
+        setExpandedSections(prev => ({ ...prev, [code]: !prev[code] }));
+      };
+
+      const handleExport = () => {
+        const data = {
+          uat_config: UAT_CONFIG,
+          tester: testerName,
+          exported_at: new Date().toISOString(),
+          summary: {
+            total: testCases.length,
+            executed: testCases.filter(t => t.test_status !== 'Not Run').length,
+            passed: testCases.filter(t => t.test_status === 'Pass').length,
+            failed: testCases.filter(t => t.test_status === 'Fail').length,
+            blocked: testCases.filter(t => t.test_status === 'Blocked').length,
+            skipped: testCases.filter(t => t.test_status === 'Skipped').length
+          },
+          results: testCases.map(t => ({
+            test_id: t.test_id,
+            title: t.title,
+            workflow_section: t.workflow_section,
+            test_status: t.test_status,
+            tested_date: t.tested_date,
+            notes: notes[t.test_id] || ''
+          }))
+        };
+
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${UAT_CONFIG.id}_results_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+      };
+
+      const handleSubmit = async () => {
+        if (!UAT_CONFIG.formspree_id) {
+          alert('Email submission not configured. Use Export to download results.');
+          return;
+        }
+        if (!testerName.trim()) {
+          alert('Please enter your name before submitting.');
+          return;
         }
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+        const executed = testCases.filter(t => t.test_status !== 'Not Run').length;
+        if (executed === 0) {
+          alert('No tests have been executed yet.');
+          return;
+        }
+
+        if (!confirm(`Submit ${executed} test results as ${testerName}?\n\nThis will email the results.`)) {
+          return;
+        }
+
+        setSubmitting(true);
+
+        const payload = {
+          _subject: `UAT Results: ${UAT_CONFIG.name} - ${testerName}`,
+          tester: testerName,
+          submitted_at: new Date().toISOString(),
+          summary: {
+            total: testCases.length,
+            executed: executed,
+            passed: testCases.filter(t => t.test_status === 'Pass').length,
+            failed: testCases.filter(t => t.test_status === 'Fail').length,
+            blocked: testCases.filter(t => t.test_status === 'Blocked').length,
+            skipped: testCases.filter(t => t.test_status === 'Skipped').length
+          },
+          results: testCases.filter(t => t.test_status !== 'Not Run').map(t => ({
+            test_id: t.test_id,
+            title: t.title,
+            section: t.workflow_section,
+            status: t.test_status,
+            notes: notes[t.test_id] || ''
+          }))
+        };
+
+        try {
+          const response = await fetch(`https://formspree.io/f/${UAT_CONFIG.formspree_id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            setSubmitted(true);
+            alert('Results submitted successfully!');
+          } else {
+            alert('Submission failed. Please use Export instead.');
+          }
+        } catch (error) {
+          alert('Network error. Please use Export instead.');
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleReset = () => {
+        if (confirm('Reset all progress? This cannot be undone.')) {
+          setTestCases(TEST_CASES_DATA.map(t => ({ ...t, test_status: 'Not Run' })));
+          setNotes({});
+          setSubmitted(false);
+        }
+      };
+
+      return (
+        <div className="max-w-4xl mx-auto py-6 px-4">
+          {/* Header */}
+          <div className="bg-white rounded-lg shadow p-4 mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <a href="index.html" className="text-blue-500 text-sm hover:underline">← Back to UAT List</a>
+                <h1 className="text-2xl font-bold text-gray-800">{UAT_CONFIG.name}</h1>
+                <p className="text-sm text-gray-500">Target: {UAT_CONFIG.target_date} | 5 sections | 66 tests</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={testerName}
+                  onChange={(e) => setTesterName(e.target.value)}
+                  placeholder="Your name"
+                  className="border rounded px-3 py-2 text-sm w-40"
+                />
+                <button onClick={handleExport} className="bg-gray-600 text-white px-3 py-2 rounded text-sm hover:bg-gray-700">
+                  Export
+                </button>
+                {UAT_CONFIG.formspree_id && (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting || submitted}
+                    className={`px-3 py-2 rounded text-sm ${
+                      submitted ? 'bg-green-100 text-green-700' :
+                      submitting ? 'bg-gray-300' : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                  >
+                    {submitted ? '✓ Submitted' : submitting ? 'Sending...' : 'Submit'}
+                  </button>
+                )}
+                <button onClick={handleReset} className="text-red-500 text-sm hover:underline">
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Dashboard */}
+          <ProgressDashboard tests={testCases} />
+
+          {/* Workflow Sections */}
+          {WORKFLOW_SECTIONS.map(section => (
+            <div key={section.code}>
+              <SectionHeader
+                section={section}
+                tests={testCases}
+                isExpanded={expandedSections[section.code]}
+                onToggle={() => toggleSection(section.code)}
+              />
+
+              {expandedSections[section.code] && (
+                <div className="ml-4 mb-6">
+                  {testCases
+                    .filter(t => t.workflow_section === section.code)
+                    .sort((a, b) => a.workflow_order - b.workflow_order)
+                    .map(test => (
+                      <TestCaseRow
+                        key={test.test_id}
+                        test={test}
+                        notes={notes}
+                        onStatusChange={handleStatusChange}
+                        onNotesChange={handleNotesChange}
+                      />
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Footer */}
+          <div className="text-center text-gray-400 text-sm mt-8">
+            <p>Propel Health UAT Toolkit</p>
+            <p className="text-xs mt-1">Progress auto-saved to browser</p>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
 </html>
