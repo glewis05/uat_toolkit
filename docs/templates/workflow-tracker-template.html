@@ -23,6 +23,7 @@
       name: 'UAT Template',
       target_date: '2025-01-01',
       tester_default: '',
+      tester_email: '',
       formspree_id: null,  // Set to enable email submission
       localStorage_key: 'uat_template_tracker'
     };
@@ -53,7 +54,7 @@
         test_type: 'happy_path',  // happy_path, negative, validation, edge_case
         test_steps: '1. Do this\n2. Then this',
         expected_results: 'What should happen',
-        context_hint: 'When you reach the X field...',  // NEW: Contextual hint
+        context_hint: 'When you reach the X field...',  // Contextual hint
         priority: 'Must Have'
       },
       // Add more tests...
@@ -120,14 +121,6 @@
     // =====================================================
     const TestCaseRow = ({ test, notes, onStatusChange, onNotesChange }) => {
       const [expanded, setExpanded] = useState(false);
-
-      const statusColors = {
-        'Not Run': 'bg-gray-100 text-gray-600',
-        'Pass': 'bg-green-100 text-green-800',
-        'Fail': 'bg-red-100 text-red-800',
-        'Blocked': 'bg-amber-100 text-amber-800',
-        'Skipped': 'bg-blue-100 text-blue-800'
-      };
 
       const typeColors = {
         'happy_path': 'bg-green-100 text-green-700',
@@ -286,7 +279,7 @@
     // MAIN APP COMPONENT
     // =====================================================
     const App = () => {
-      // State
+      // State - Test Cases
       const [testCases, setTestCases] = useState(() => {
         const saved = localStorage.getItem(UAT_CONFIG.localStorage_key);
         if (saved) {
@@ -296,31 +289,199 @@
         return TEST_CASES_DATA.map(t => ({ ...t, test_status: 'Not Run' }));
       });
 
+      // State - Notes
       const [notes, setNotes] = useState(() => {
         const saved = localStorage.getItem(UAT_CONFIG.localStorage_key);
         return saved ? JSON.parse(saved).notes || {} : {};
       });
 
+      // State - Tester Name
       const [testerName, setTesterName] = useState(() => {
         const saved = localStorage.getItem(UAT_CONFIG.localStorage_key);
         return saved ? JSON.parse(saved).testerName || UAT_CONFIG.tester_default : UAT_CONFIG.tester_default;
       });
 
+      // State - Expanded Sections
       const [expandedSections, setExpandedSections] = useState(
         WORKFLOW_SECTIONS.reduce((acc, s) => ({ ...acc, [s.code]: true }), {})
       );
 
+      // State - Submission
       const [submitting, setSubmitting] = useState(false);
       const [submitted, setSubmitted] = useState(false);
+
+      // State - Sync
+      const [lastSyncTime, setLastSyncTime] = useState(() => {
+        const saved = localStorage.getItem(UAT_CONFIG.localStorage_key);
+        return saved ? JSON.parse(saved).lastSyncTime || null : null;
+      });
+      const [syncStatus, setSyncStatus] = useState(null); // 'syncing', 'synced', 'error'
 
       // Save to localStorage
       useEffect(() => {
         localStorage.setItem(UAT_CONFIG.localStorage_key, JSON.stringify({
-          testCases, notes, testerName, lastUpdated: new Date().toISOString()
+          testCases, notes, testerName, lastSyncTime, lastUpdated: new Date().toISOString()
         }));
-      }, [testCases, notes, testerName]);
+      }, [testCases, notes, testerName, lastSyncTime]);
 
-      // Handlers
+      // =====================================================
+      // SYNC PROGRESS FUNCTION
+      // =====================================================
+      const syncProgress = async (triggerType = 'manual') => {
+        if (!UAT_CONFIG.formspree_id) {
+          console.log('Formspree not configured, skipping sync');
+          return;
+        }
+
+        const executed = testCases.filter(t => t.test_status !== 'Not Run').length;
+        if (executed === 0 && triggerType !== 'manual') {
+          // Don't auto-sync if nothing done yet
+          return;
+        }
+
+        setSyncStatus('syncing');
+
+        const pct = Math.round((executed / testCases.length) * 100);
+
+        const payload = {
+          _subject: `UAT Progress: ${UAT_CONFIG.name} - ${testerName} (${pct}%)`,
+          sync_type: triggerType, // 'auto_open', 'auto_10pm', 'manual', 'final'
+          tester: testerName,
+          tester_email: UAT_CONFIG.tester_email || '',
+          synced_at: new Date().toISOString(),
+          progress: {
+            total: testCases.length,
+            executed: executed,
+            remaining: testCases.length - executed,
+            percent_complete: pct,
+            passed: testCases.filter(t => t.test_status === 'Pass').length,
+            failed: testCases.filter(t => t.test_status === 'Fail').length,
+            blocked: testCases.filter(t => t.test_status === 'Blocked').length,
+            skipped: testCases.filter(t => t.test_status === 'Skipped').length
+          },
+          sections: WORKFLOW_SECTIONS.map(section => {
+            const sectionTests = testCases.filter(t => t.workflow_section === section.code);
+            const sectionExecuted = sectionTests.filter(t => t.test_status !== 'Not Run').length;
+            return {
+              code: section.code,
+              name: section.name,
+              total: sectionTests.length,
+              executed: sectionExecuted,
+              percent: sectionTests.length > 0 ? Math.round((sectionExecuted / sectionTests.length) * 100) : 0,
+              passed: sectionTests.filter(t => t.test_status === 'Pass').length,
+              failed: sectionTests.filter(t => t.test_status === 'Fail').length
+            };
+          }),
+          results: testCases.map(t => ({
+            test_id: t.test_id,
+            title: t.title,
+            section: t.workflow_section,
+            status: t.test_status,
+            tested_date: t.tested_date || null,
+            notes: notes[t.test_id] || ''
+          }))
+        };
+
+        try {
+          const response = await fetch(`https://formspree.io/f/${UAT_CONFIG.formspree_id}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const now = new Date().toISOString();
+            setLastSyncTime(now);
+            setSyncStatus('synced');
+
+            // Clear synced status after 3 seconds
+            setTimeout(() => setSyncStatus(null), 3000);
+
+            if (triggerType === 'manual') {
+              alert('Progress synced successfully!');
+            }
+          } else {
+            setSyncStatus('error');
+            if (triggerType === 'manual') {
+              alert('Sync failed. Please try again.');
+            }
+          }
+        } catch (error) {
+          console.error('Sync error:', error);
+          setSyncStatus('error');
+          if (triggerType === 'manual') {
+            alert('Network error. Please check your connection.');
+          }
+        }
+      };
+
+      // =====================================================
+      // AUTO-SYNC ON OPEN (>8 hours since last sync)
+      // =====================================================
+      useEffect(() => {
+        const checkAutoSync = () => {
+          if (!lastSyncTime) {
+            // Never synced, don't auto-sync on first open
+            return;
+          }
+
+          const hoursSinceSync = (Date.now() - new Date(lastSyncTime).getTime()) / (1000 * 60 * 60);
+
+          if (hoursSinceSync >= 8) {
+            console.log(`Auto-syncing: ${hoursSinceSync.toFixed(1)} hours since last sync`);
+            syncProgress('auto_open');
+          }
+        };
+
+        // Check after a short delay to let state settle
+        const timer = setTimeout(checkAutoSync, 2000);
+        return () => clearTimeout(timer);
+      }, []); // Run once on mount
+
+      // =====================================================
+      // 10PM PST AUTO-SYNC CHECK
+      // =====================================================
+      useEffect(() => {
+        const check10pmSync = () => {
+          const now = new Date();
+
+          // Convert to PST (UTC-8, or UTC-7 during DST)
+          // Using a simple approximation - checking for ~10pm local Pacific time
+          const pstOffset = -8; // Standard PST
+          const utcHours = now.getUTCHours();
+          const pstHour = (utcHours + pstOffset + 24) % 24;
+          const pstMinute = now.getUTCMinutes();
+
+          // If it's between 10:00pm and 10:05pm PST
+          if (pstHour === 22 && pstMinute < 5) {
+            // Check if we already synced today
+            const today = now.toISOString().split('T')[0];
+            const lastSyncDate = lastSyncTime ? lastSyncTime.split('T')[0] : null;
+
+            if (lastSyncDate !== today) {
+              // Show confirmation and sync
+              if (confirm('It\'s 10pm - would you like to sync your progress?')) {
+                syncProgress('auto_10pm');
+              }
+            }
+          }
+        };
+
+        // Check every minute
+        const interval = setInterval(check10pmSync, 60000);
+
+        // Also check immediately on mount
+        check10pmSync();
+
+        return () => clearInterval(interval);
+      }, [lastSyncTime]);
+
+      // =====================================================
+      // HANDLERS
+      // =====================================================
       const handleStatusChange = (testId, status) => {
         setTestCases(prev => prev.map(t =>
           t.test_id === testId
@@ -384,29 +545,49 @@
           return;
         }
 
-        if (!confirm(`Submit ${executed} test results as ${testerName}?\n\nThis will email the results.`)) {
+        if (!confirm(`Submit ${executed} test results as ${testerName}?\n\nThis is your FINAL submission.`)) {
           return;
         }
 
         setSubmitting(true);
 
+        const pct = Math.round((executed / testCases.length) * 100);
+
         const payload = {
-          _subject: `UAT Results: ${UAT_CONFIG.name} - ${testerName}`,
+          _subject: `UAT FINAL: ${UAT_CONFIG.name} - ${testerName} (${pct}%)`,
+          sync_type: 'final',
           tester: testerName,
+          tester_email: UAT_CONFIG.tester_email || '',
           submitted_at: new Date().toISOString(),
-          summary: {
+          progress: {
             total: testCases.length,
             executed: executed,
+            remaining: testCases.length - executed,
+            percent_complete: pct,
             passed: testCases.filter(t => t.test_status === 'Pass').length,
             failed: testCases.filter(t => t.test_status === 'Fail').length,
             blocked: testCases.filter(t => t.test_status === 'Blocked').length,
             skipped: testCases.filter(t => t.test_status === 'Skipped').length
           },
-          results: testCases.filter(t => t.test_status !== 'Not Run').map(t => ({
+          sections: WORKFLOW_SECTIONS.map(section => {
+            const sectionTests = testCases.filter(t => t.workflow_section === section.code);
+            const sectionExecuted = sectionTests.filter(t => t.test_status !== 'Not Run').length;
+            return {
+              code: section.code,
+              name: section.name,
+              total: sectionTests.length,
+              executed: sectionExecuted,
+              percent: sectionTests.length > 0 ? Math.round((sectionExecuted / sectionTests.length) * 100) : 0,
+              passed: sectionTests.filter(t => t.test_status === 'Pass').length,
+              failed: sectionTests.filter(t => t.test_status === 'Fail').length
+            };
+          }),
+          results: testCases.map(t => ({
             test_id: t.test_id,
             title: t.title,
             section: t.workflow_section,
             status: t.test_status,
+            tested_date: t.tested_date || null,
             notes: notes[t.test_id] || ''
           }))
         };
@@ -414,18 +595,24 @@
         try {
           const response = await fetch(`https://formspree.io/f/${UAT_CONFIG.formspree_id}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
             body: JSON.stringify(payload)
           });
 
           if (response.ok) {
             setSubmitted(true);
-            alert('Results submitted successfully!');
+            setLastSyncTime(new Date().toISOString());
+            alert('Results submitted successfully!\n\nThank you for completing the UAT.');
           } else {
-            alert('Submission failed. Please use Export JSON instead.');
+            const error = await response.json().catch(() => ({}));
+            alert(`Submission failed: ${error.error || 'Unknown error'}\n\nPlease use Export JSON instead.`);
           }
         } catch (error) {
-          alert('Network error. Please use Export JSON instead.');
+          console.error('Submit error:', error);
+          alert('Network error. Please check your connection and try again, or use Export JSON.');
         } finally {
           setSubmitting(false);
         }
@@ -436,6 +623,7 @@
           setTestCases(TEST_CASES_DATA.map(t => ({ ...t, test_status: 'Not Run' })));
           setNotes({});
           setSubmitted(false);
+          setLastSyncTime(null);
         }
       };
 
@@ -450,34 +638,64 @@
                 <p className="text-sm text-gray-500">Target: {UAT_CONFIG.target_date}</p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
                 <input
                   type="text"
                   value={testerName}
                   onChange={(e) => setTesterName(e.target.value)}
                   placeholder="Your name"
-                  className="border rounded px-3 py-2 text-sm w-40"
+                  className="border rounded px-3 py-2 text-sm w-36"
                 />
-                <button onClick={handleExport} className="bg-gray-600 text-white px-3 py-2 rounded text-sm hover:bg-gray-700">
-                  Export
+
+                {/* Sync Progress Button */}
+                <button
+                  onClick={() => syncProgress('manual')}
+                  disabled={syncStatus === 'syncing'}
+                  className={`px-3 py-2 rounded text-sm flex items-center gap-1 ${
+                    syncStatus === 'syncing' ? 'bg-gray-300 text-gray-500' :
+                    syncStatus === 'synced' ? 'bg-green-100 text-green-700' :
+                    'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  }`}
+                  title={lastSyncTime ? `Last sync: ${new Date(lastSyncTime).toLocaleString()}` : 'Never synced'}
+                >
+                  {syncStatus === 'syncing' ? '⏳' : syncStatus === 'synced' ? '✓' : '📤'}
+                  <span className="hidden sm:inline">{syncStatus === 'syncing' ? 'Syncing...' : 'Sync'}</span>
                 </button>
+
+                {/* Export Button */}
+                <button onClick={handleExport} className="bg-gray-600 text-white px-3 py-2 rounded text-sm hover:bg-gray-700">
+                  <span className="hidden sm:inline">📥 </span>Export
+                </button>
+
+                {/* Submit Button (final) */}
                 {UAT_CONFIG.formspree_id && (
                   <button
                     onClick={handleSubmit}
                     disabled={submitting || submitted}
-                    className={`px-3 py-2 rounded text-sm ${
-                      submitted ? 'bg-green-100 text-green-700' :
-                      submitting ? 'bg-gray-300' : 'bg-green-600 text-white hover:bg-green-700'
+                    className={`px-3 py-2 rounded text-sm font-medium ${
+                      submitted
+                        ? 'bg-green-100 text-green-700'
+                        : submitting
+                          ? 'bg-gray-300 text-gray-500'
+                          : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    {submitted ? '✓ Submitted' : submitting ? 'Sending...' : 'Submit'}
+                    {submitted ? '✓ Done' : submitting ? '...' : '📧 Submit'}
                   </button>
                 )}
+
                 <button onClick={handleReset} className="text-red-500 text-sm hover:underline">
                   Reset
                 </button>
               </div>
             </div>
+
+            {/* Last Sync Info */}
+            {lastSyncTime && (
+              <p className="text-xs text-gray-400 mt-2 text-right">
+                Last synced: {new Date(lastSyncTime).toLocaleString()}
+              </p>
+            )}
           </div>
 
           {/* Progress Dashboard */}
