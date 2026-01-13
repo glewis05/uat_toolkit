@@ -118,20 +118,34 @@ def get_testers_for_cycle(cursor, cycle_id: str) -> list:
         list: List of tester email addresses
 
     WHY THIS APPROACH:
-        We query DISTINCT assigned_to from uat_test_cases where
-        the test is linked to this cycle. This works because
-        assignments are stored directly on the test case record.
+        First tries the uat_test_assignments table (supports overlap/cross-check).
+        Falls back to uat_test_cases.assigned_to for backward compatibility.
     """
+    # Try new assignments table first (supports multiple testers per test)
     cursor.execute("""
         SELECT DISTINCT assigned_to
-        FROM uat_test_cases
-        WHERE uat_cycle_id = ?
+        FROM uat_test_assignments
+        WHERE cycle_id = ?
         AND assigned_to IS NOT NULL
         AND assigned_to != ''
         ORDER BY assigned_to
     """, (cycle_id,))
 
-    return [row[0] for row in cursor.fetchall()]
+    result = [row[0] for row in cursor.fetchall()]
+
+    # Fall back to legacy assigned_to column on uat_test_cases if no assignments found
+    if not result:
+        cursor.execute("""
+            SELECT DISTINCT assigned_to
+            FROM uat_test_cases
+            WHERE uat_cycle_id = ?
+            AND assigned_to IS NOT NULL
+            AND assigned_to != ''
+            ORDER BY assigned_to
+        """, (cycle_id,))
+        result = [row[0] for row in cursor.fetchall()]
+
+    return result
 
 
 def get_tests_for_tester(cursor, cycle_id: str, tester: str) -> list:
@@ -146,31 +160,39 @@ def get_tests_for_tester(cursor, cycle_id: str, tester: str) -> list:
 
     RETURNS:
         list: List of test case dictionaries
+
+    WHY THIS APPROACH:
+        First tries uat_test_assignments table (supports overlap/cross-check).
+        Falls back to uat_test_cases.assigned_to for backward compatibility.
+        The assignment_type from the assignments table indicates if this is
+        a 'primary' or 'cross_check' assignment.
     """
+    # Try new assignments table first
     cursor.execute("""
         SELECT
-            test_id,
-            title,
-            workflow_section,
-            workflow_order,
-            category,
-            test_type,
-            test_steps,
-            expected_results,
-            prerequisites,
-            priority,
-            compliance_framework,
-            assignment_type,
-            profile_id,
-            platform,
-            persona,
-            target_rule,
-            patient_conditions
-        FROM uat_test_cases
-        WHERE uat_cycle_id = ?
-        AND assigned_to = ?
+            tc.test_id,
+            tc.title,
+            tc.workflow_section,
+            tc.workflow_order,
+            tc.category,
+            tc.test_type,
+            tc.test_steps,
+            tc.expected_results,
+            tc.prerequisites,
+            tc.priority,
+            tc.compliance_framework,
+            a.assignment_type,
+            tc.profile_id,
+            tc.platform,
+            tc.persona,
+            tc.target_rule,
+            tc.patient_conditions
+        FROM uat_test_assignments a
+        JOIN uat_test_cases tc ON a.test_id = tc.test_id
+        WHERE a.cycle_id = ?
+        AND a.assigned_to = ?
         ORDER BY
-            CASE workflow_section
+            CASE tc.workflow_section
                 WHEN 'P4M' THEN 1
                 WHEN 'PR4M' THEN 2
                 WHEN 'GRX' THEN 3
@@ -181,12 +203,55 @@ def get_tests_for_tester(cursor, cycle_id: str, tester: str) -> list:
                 WHEN 'DEP' THEN 3
                 ELSE 6
             END,
-            workflow_order,
-            test_id
+            tc.workflow_order,
+            tc.test_id
     """, (cycle_id, tester))
 
+    rows = cursor.fetchall()
+
+    # Fall back to legacy if no results from assignments table
+    if not rows:
+        cursor.execute("""
+            SELECT
+                test_id,
+                title,
+                workflow_section,
+                workflow_order,
+                category,
+                test_type,
+                test_steps,
+                expected_results,
+                prerequisites,
+                priority,
+                compliance_framework,
+                assignment_type,
+                profile_id,
+                platform,
+                persona,
+                target_rule,
+                patient_conditions
+            FROM uat_test_cases
+            WHERE uat_cycle_id = ?
+            AND assigned_to = ?
+            ORDER BY
+                CASE workflow_section
+                    WHEN 'P4M' THEN 1
+                    WHEN 'PR4M' THEN 2
+                    WHEN 'GRX' THEN 3
+                    WHEN 'DRAFT' THEN 4
+                    WHEN 'EDGE' THEN 5
+                    WHEN 'POS' THEN 1
+                    WHEN 'NEG' THEN 2
+                    WHEN 'DEP' THEN 3
+                    ELSE 6
+                END,
+                workflow_order,
+                test_id
+        """, (cycle_id, tester))
+        rows = cursor.fetchall()
+
     tests = []
-    for row in cursor.fetchall():
+    for row in rows:
         # Use workflow_section if set, otherwise fall back to category
         section = row[2] if row[2] else row[4]
 
@@ -227,7 +292,11 @@ def get_workflow_sections(cursor, cycle_id: str, tester: str) -> list:
 
     RETURNS:
         list: List of section dictionaries with metadata
+
+    WHY THIS APPROACH:
+        First tries uat_test_assignments table, falls back to uat_test_cases.assigned_to.
     """
+    # Try new assignments table first
     cursor.execute("""
         SELECT DISTINCT
             COALESCE(tc.workflow_section, tc.category) as section,
@@ -235,18 +304,39 @@ def get_workflow_sections(cursor, cycle_id: str, tester: str) -> list:
             ws.section_description,
             ws.guidance_text,
             ws.display_order
-        FROM uat_test_cases tc
+        FROM uat_test_assignments a
+        JOIN uat_test_cases tc ON a.test_id = tc.test_id
         LEFT JOIN uat_workflow_sections ws
             ON ws.section_code = COALESCE(tc.workflow_section, tc.category)
-        WHERE tc.uat_cycle_id = ?
-        AND tc.assigned_to = ?
+        WHERE a.cycle_id = ?
+        AND a.assigned_to = ?
         ORDER BY COALESCE(ws.display_order, 99)
     """, (cycle_id, tester))
+
+    rows = cursor.fetchall()
+
+    # Fall back to legacy if no results
+    if not rows:
+        cursor.execute("""
+            SELECT DISTINCT
+                COALESCE(tc.workflow_section, tc.category) as section,
+                ws.section_name,
+                ws.section_description,
+                ws.guidance_text,
+                ws.display_order
+            FROM uat_test_cases tc
+            LEFT JOIN uat_workflow_sections ws
+                ON ws.section_code = COALESCE(tc.workflow_section, tc.category)
+            WHERE tc.uat_cycle_id = ?
+            AND tc.assigned_to = ?
+            ORDER BY COALESCE(ws.display_order, 99)
+        """, (cycle_id, tester))
+        rows = cursor.fetchall()
 
     sections = []
     seen = set()
 
-    for row in cursor.fetchall():
+    for row in rows:
         code = row[0]
         if not code or code in seen:
             continue
@@ -366,24 +456,27 @@ def generate_tracker_html(cycle_info: dict, tester: str, tests: list,
         template = f.read()
 
     # Replace placeholders using regex
+    # Using lambda to avoid issues with backslashes in replacement strings
+    # (json.dumps may produce unicode escapes like \u0000 that re.sub would misinterpret)
+
     # Replace UAT_CONFIG block
     template = re.sub(
         r'const UAT_CONFIG = \{[^}]+\};',
-        config_js,
+        lambda m: config_js,
         template
     )
 
     # Replace WORKFLOW_SECTIONS block (handles multiline)
     template = re.sub(
         r'const WORKFLOW_SECTIONS = \[[\s\S]*?\n    \];',
-        sections_js,
+        lambda m: sections_js,
         template
     )
 
     # Replace TEST_CASES_DATA block (handles multiline)
     template = re.sub(
         r'const TEST_CASES_DATA = \[[\s\S]*?\n    \];',
-        tests_js,
+        lambda m: tests_js,
         template
     )
 
@@ -511,15 +604,19 @@ def update_main_index(cursor) -> str:
         str: HTML content for the main landing page
     """
     # Get all cycles with tester and test counts
+    # Uses COALESCE to try uat_test_assignments first, fall back to uat_test_cases.assigned_to
     cursor.execute("""
         SELECT
             c.cycle_id, c.name, c.target_launch_date, c.status,
-            COUNT(DISTINCT tc.assigned_to) as tester_count,
-            COUNT(tc.test_id) as test_count
+            COALESCE(
+                (SELECT COUNT(DISTINCT assigned_to) FROM uat_test_assignments WHERE cycle_id = c.cycle_id),
+                (SELECT COUNT(DISTINCT assigned_to) FROM uat_test_cases WHERE uat_cycle_id = c.cycle_id AND assigned_to IS NOT NULL AND assigned_to != '')
+            ) as tester_count,
+            COALESCE(
+                (SELECT COUNT(*) FROM uat_test_assignments WHERE cycle_id = c.cycle_id),
+                (SELECT COUNT(*) FROM uat_test_cases WHERE uat_cycle_id = c.cycle_id AND assigned_to IS NOT NULL AND assigned_to != '')
+            ) as test_count
         FROM uat_cycles c
-        LEFT JOIN uat_test_cases tc ON c.cycle_id = tc.uat_cycle_id
-            AND tc.assigned_to IS NOT NULL AND tc.assigned_to != ''
-        GROUP BY c.cycle_id
         ORDER BY c.created_date DESC
     """)
 

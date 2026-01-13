@@ -3,95 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Propel Health UAT Tools</title>
+    <title>Propel Health UAT Toolkit</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'propel-navy': '#1a365d',
-                        'propel-teal': '#4a9aba',
-                        'propel-light': '#e8f4f8',
-                    }
-                }
-            }
-        }
-    </script>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div class="max-w-4xl mx-auto py-12 px-4">
-        <!-- Header -->
-        <div class="text-center mb-12">
-            <h1 class="text-4xl font-bold text-propel-navy mb-2">Propel Health UAT Tools</h1>
-            <p class="text-gray-600 text-lg">Test execution trackers for User Acceptance Testing</p>
+<body class="bg-gray-100 min-h-screen py-8">
+    <div class="max-w-3xl mx-auto px-4">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Propel Health UAT Toolkit</h1>
+            <p class="text-gray-600 mt-2">User Acceptance Testing Trackers</p>
         </div>
 
-        <!-- Tracker Cards -->
         <div class="space-y-4">
-            <!-- ONB Questionnaire - Active -->
-            <a href="onb-tracker.html" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow border-l-4 border-green-500">
-                <div class="p-6">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded">Active</span>
-                                <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">Feature UAT</span>
-                            </div>
-                            <h2 class="text-xl font-semibold text-gray-900">ONB Questionnaire v1</h2>
-                            <p class="text-gray-600">Guided walkthrough &bull; 5 sections &bull; 66 tests</p>
-                            <p class="text-sm text-gray-500 mt-1">Target: May 2, 2025</p>
+            
+            <a href="uat-onb-v1/index.html"
+               class="block bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow border-l-4 border-green-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">planning</span>
                         </div>
-                        <div class="text-propel-teal text-3xl">&rarr;</div>
+                        <h2 class="text-xl font-semibold text-gray-800">ONB Questionnaire v1</h2>
+                        <p class="text-gray-600">2 testers | 92 tests</p>
+                        <p class="text-sm text-gray-500 mt-1">Target: 2025-05-02</p>
                     </div>
-                    <div class="flex gap-2 mt-3 flex-wrap">
-                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">P4M (39)</span>
-                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">PR4M</span>
-                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">GRX (8)</span>
-                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Draft (16)</span>
-                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Edge (3)</span>
-                    </div>
+                    <span class="text-blue-500 text-2xl">→</span>
                 </div>
             </a>
 
-            <!-- NCCN Q4 2025 - Coming Soon -->
-            <div class="block bg-white rounded-lg shadow-md border-l-4 border-gray-300 opacity-60">
-                <div class="p-6 flex items-center justify-between">
+            <div class="block bg-white rounded-lg shadow p-6 border-l-4 border-gray-300 opacity-60">
+                <div class="flex items-center justify-between">
                     <div>
                         <div class="flex items-center gap-2 mb-1">
-                            <span class="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-0.5 rounded">Coming Soon</span>
-                            <span class="bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded">NCCN Validation</span>
+                            <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">planning</span>
+                            <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">No testers assigned</span>
                         </div>
-                        <h2 class="text-xl font-semibold text-gray-700">NCCN Q4 2025</h2>
-                        <p class="text-gray-500">Rule validation &bull; ~180 test profiles</p>
-                        <p class="text-sm text-gray-400 mt-1">P4M + Px4M platforms</p>
+                        <h2 class="text-xl font-semibold text-gray-700">ONB Questionnaire v1</h2>
+                        <p class="text-gray-500">0 tests defined</p>
+                        <p class="text-sm text-gray-400 mt-1">Target: 2025-05-02</p>
                     </div>
-                    <div class="text-gray-300 text-3xl">&rarr;</div>
+                    <span class="text-gray-300 text-2xl">→</span>
                 </div>
             </div>
 
-            <!-- GenoRx e-Consent - Coming Soon -->
-            <div class="block bg-white rounded-lg shadow-md border-l-4 border-gray-300 opacity-60">
-                <div class="p-6 flex items-center justify-between">
-                    <div>
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-0.5 rounded">Coming Soon</span>
-                            <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">Feature UAT</span>
-                        </div>
-                        <h2 class="text-xl font-semibold text-gray-700">GenoRx e-Consent</h2>
-                        <p class="text-gray-500">Feature UAT &bull; ~51 test cases</p>
-                        <p class="text-sm text-gray-400 mt-1">Electronic consent workflow</p>
-                    </div>
-                    <div class="text-gray-300 text-3xl">&rarr;</div>
-                </div>
-            </div>
         </div>
 
-        <!-- Footer -->
-        <div class="text-center mt-12 text-gray-500 text-sm">
-            <p>Propel Health &bull; UAT Toolkit</p>
+        <div class="mt-12 text-center text-gray-400 text-sm">
+            <p>Propel Health</p>
             <p class="mt-1">
-                <a href="https://github.com/glewis05/uat_toolkit" class="text-propel-teal hover:underline">GitHub Repository</a>
+                <a href="https://github.com/glewis05/uat_toolkit"
+                   class="text-blue-500 hover:underline">GitHub Repository</a>
             </p>
         </div>
     </div>
