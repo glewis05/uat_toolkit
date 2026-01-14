@@ -5,7 +5,14 @@
       "Bash(python:*)",
       "Bash(pip3 install:*)",
       "Bash(ls:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(chmod:*)",
+      "Bash(git pull:*)",
+      "Bash(gh api:*)",
+      "Bash(gh auth status:*)"
     ]
   }
 }
