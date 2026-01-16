@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from database.db_manager import UATDatabase, get_database_path
 from database.queries import get_cycle_summary, list_active_cycles, get_gate_checklist
 from importers.nccn_importer import import_nccn_profiles, import_nccn_assignments
+from importers.nccn_notation_parser import parse_test_notation, notation_to_dict, validate_notation
 from reporters.cycle_summary import get_dashboard_report, get_progress_report
 from reporters.excel_export import export_uat_results
 
@@ -230,6 +231,102 @@ def cmd_decision(args):
             print(f"Error: {message}")
 
 
+def cmd_parse_notation(args):
+    """
+    Parse an NCCN test notation string into structured data.
+
+    PURPOSE:
+        Validates and parses NCCN test case notation for rule validation testing.
+        Useful for debugging notation strings before importing or for understanding
+        how the parser interprets a given notation.
+
+    AVIATION ANALOGY:
+        Like running a preflight checklist parser to verify mission briefing
+        is correctly formatted before the mission starts.
+    """
+    import json
+
+    notation = args.notation
+
+    print(f"\n{'=' * 60}")
+    print("  NCCN NOTATION PARSER")
+    print(f"{'=' * 60}")
+    print(f"\nInput: {notation}")
+    print(f"{'-' * 50}")
+
+    # Validate first if requested
+    if args.validate:
+        validation = validate_notation(notation)
+
+        if validation['errors']:
+            print("\nERRORS:")
+            for err in validation['errors']:
+                print(f"  ✗ {err}")
+
+        if validation['warnings']:
+            print("\nWARNINGS:")
+            for warn in validation['warnings']:
+                print(f"  ! {warn}")
+
+        if validation['valid']:
+            print("\n✓ Notation is valid")
+        else:
+            print("\n✗ Notation has errors")
+            return
+
+    # Parse the notation
+    parsed = parse_test_notation(
+        notation,
+        target_rule=args.rule,
+        platform=args.platform
+    )
+    result_dict = notation_to_dict(parsed)
+
+    # Output based on format
+    if args.json:
+        print(json.dumps(result_dict, indent=2))
+    else:
+        # Human-readable output
+        print(f"\nExpected Outcome: {result_dict['expected_outcome'].upper()}")
+
+        if result_dict['target_rule']:
+            print(f"Target Rule: {result_dict['target_rule']}")
+        if result_dict['platform']:
+            print(f"Platform: {result_dict['platform']}")
+
+        print(f"\nEntries ({len(result_dict['entries'])}):")
+        for i, entry in enumerate(result_dict['entries'], 1):
+            rel_type = entry['relationship_type']
+            rel = entry['relationship']
+            same = " (same relative)" if entry['is_same_relative'] else ""
+            print(f"\n  [{i}] {rel} ({rel_type}){same}")
+
+            for cond in entry['conditions']:
+                cancer = cond['cancer_type']
+                details = []
+
+                if cond['age_diagnosed']:
+                    details.append(f"age {cond['age_diagnosed']}")
+                if cond['gleason_score']:
+                    details.append(f"Gleason {cond['gleason_score']}")
+                if cond['is_aggressive']:
+                    details.append("aggressive")
+                if cond['is_metastatic']:
+                    details.append("metastatic")
+                if cond['additional_notes']:
+                    details.append(f"({cond['additional_notes']})")
+
+                detail_str = ", ".join(details) if details else ""
+                print(f"      Cancer: {cancer}")
+                if detail_str:
+                    print(f"      Details: {detail_str}")
+
+        if result_dict['parse_errors']:
+            print(f"\nParse Warnings:")
+            for err in result_dict['parse_errors']:
+                print(f"  ! {err}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='UAT Toolkit - Manage UAT cycles and test execution',
@@ -241,6 +338,8 @@ Examples:
   %(prog)s import-nccn package.xlsx UAT-NCCN-12345678 --preview
   %(prog)s assign package.xlsx UAT-NCCN-12345678 --sheet "Tester 1" --tester jane@example.com
   %(prog)s export UAT-NCCN-12345678
+  %(prog)s parse-notation "POS: PHX: Prostate Cancer, Gleason 8"
+  %(prog)s parse-notation "NEG: FDR: Breast, age 45 AND SDR: Ovarian" --json
         """
     )
 
@@ -324,6 +423,16 @@ Examples:
     p_decision.add_argument('--signed-by', required=True, help='Who is signing off')
     p_decision.add_argument('--notes', '-n', help='Decision notes/conditions')
     p_decision.set_defaults(func=cmd_decision)
+
+    # parse-notation command
+    # PURPOSE: Parse NCCN test notation strings for debugging and validation
+    p_parse = subparsers.add_parser('parse-notation', help='Parse NCCN test notation string')
+    p_parse.add_argument('notation', help='Notation string (e.g., "POS: PHX: Prostate Cancer, Gleason 8")')
+    p_parse.add_argument('--rule', '-r', help='Target NCCN rule ID')
+    p_parse.add_argument('--platform', '-p', choices=['P4M', 'Px4M'], help='Platform (P4M or Px4M)')
+    p_parse.add_argument('--json', '-j', action='store_true', help='Output as JSON')
+    p_parse.add_argument('--validate', '-v', action='store_true', help='Validate notation first')
+    p_parse.set_defaults(func=cmd_parse_notation)
 
     # Parse and execute
     args = parser.parse_args()
